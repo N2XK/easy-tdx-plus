@@ -1,0 +1,31 @@
+"""TQLEX Entry 常量。"""
+
+from __future__ import annotations
+
+DEFAULT_TQLEX_BASE_URL = "http://static.tdx.com.cn:7615/TQLEX"
+DEFAULT_LIMIT_BOARD_BASE_URL = "http://hot.icfqs.com:7615/TQLEX"
+DEFAULT_QSID = "tdx"
+
+ENTRY_STOCK_INFO = "CWServ.tdxf10_gg_comreq"
+ENTRY_COMPANY_PROFILE = "CWServ.tdxf10_gg_gsgk"
+ENTRY_BUSINESS_COMPOSITION = "CWServ.tdxf10_gg_jyfx"
+ENTRY_SHAREHOLDER_CHANGE = "CWServ.tdxf10_gg_gdyj"
+ENTRY_DIVIDEND_FINANCING = "CWServ.tdxf10_gg_fhrz"
+ENTRY_ALLOTMENT = "CWServ.tdxf10_gg_fhrz_zfhpmx"
+ENTRY_FINANCE_REPORT = "CWServ.tdxf10_gg_cwfx"
+ENTRY_FINANCE_DIAGNOSIS = "CWServ.tdxf10_gg_cwzd"
+ENTRY_STOCK_SCORE = "CWServ.tdxf10_gg_ggzp"
+ENTRY_PROFIT_FORECAST = "CWServ.tdxf10_gg_ybpj"
+ENTRY_RANKING_DETAIL = "CWServ.tdxf10_gg_zxts_rqpm"
+ENTRY_GOVERNANCE = "CWServ.tdxf10_gg_zbyz"
+ENTRY_HOT_TOPICS = "CWServ.tdxf10_gg_rdtc"
+ENTRY_TOPIC_COMPARE = "CWServ.tdxf10_gg_rdtc_gndb"
+ENTRY_COMPANY_NEWS = "CWServ.tdxf10_gg_gszx"
+ENTRY_NORTHBOUND = "CWServ.tdxf10_gg_zlcc"
+ENTRY_DETAIL = "CWServ.tdxf10_gg_idreq"
+ENTRY_CACHE = "CWSearch.tzx_rcache"
+ENTRY_LIMIT_BOARD_LADDER = "CWServ.cfg_fx_lbtt"
+ENTRY_THEME_MARKET = "HQServ.hq_nlp_tcihq"
+ENTRY_VALUATION = "HQServ.hq_nlp_gpsj"
+
+MARKET_TO_ID = {"sz": 0, "sh": 1, "bj": 2}

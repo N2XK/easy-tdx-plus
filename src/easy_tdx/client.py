@@ -54,6 +54,7 @@ from .config import (
 )
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily
 from .exceptions import TdxConnectionError, TdxDecodeError
+from .f10 import F10Client
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
 from .models.enums import KlineCategory, Market
@@ -281,6 +282,14 @@ class TdxClient:
         self._heartbeat_interval = heartbeat_interval
         self._conn = TdxConnection(host, port, timeout)
         self._zhb_cache: dict[str, bytes] | None = None
+        self._f10: F10Client | None = None
+
+    @property
+    def f10(self) -> F10Client:
+        """7615 F10 / TQLEX 客户端（懒加载，走独立 HTTP 网关）。"""
+        if self._f10 is None:
+            self._f10 = F10Client()
+        return self._f10
 
     # ------------------------------------------------------------------ #
     # 工厂方法：自动优选最低延迟服务器
@@ -887,6 +896,53 @@ class TdxClient:
             float_shares=float_shares or 0.0,
             total_shares=total_shares or 0.0,
         )
+
+    def get_stock_profile(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """股票信息汇总：行情 + 股本 + 市值 + 换手率 + 估值（PE/股息率）。
+
+        组合实时行情（标准协议）、最新财务（股本）、tdxstat（PE/股息）。
+        """
+        quotes = self.get_security_quotes(stocks)
+        if quotes.empty:
+            return quotes
+        stat = self.get_tdx_stat()
+        stat_map = (
+            stat.set_index("code")[["pe_ttm", "pe_static", "div_yield"]] if not stat.empty else None
+        )
+        rows: list[dict[str, Any]] = []
+        for (mkt, code), (_, q) in zip(stocks, quotes.iterrows()):
+            fin = self.get_finance_info(mkt, code)
+            float_shares = float(fin.iloc[0].get("liutong_guben", 0.0)) if not fin.empty else 0.0
+            total_shares = float(fin.iloc[0].get("zong_guben", 0.0)) if not fin.empty else 0.0
+            price = float(q["price"])
+            vol = float(q["vol"])  # 标准行情 vol 单位为手
+            vol_shares = vol * 100
+            rec: dict[str, Any] = {
+                "market": int(mkt),
+                "code": code,
+                "price": price,
+                "pre_close": float(q["pre_close"]),
+                "change_pct": round((price / float(q["pre_close"]) - 1) * 100, 2)
+                if q["pre_close"]
+                else None,
+                "open": float(q["open"]),
+                "high": float(q["high"]),
+                "low": float(q["low"]),
+                "vol": vol,
+                "amount": float(q["amount"]),
+                "float_shares": float_shares,
+                "total_shares": total_shares,
+                "turnover_pct": round(vol_shares / float_shares * 100, 4) if float_shares else None,
+                "float_mv": round(price * float_shares, 2) if float_shares else None,
+                "total_mv": round(price * total_shares, 2) if total_shares else None,
+            }
+            if stat_map is not None and code in stat_map.index:
+                s = stat_map.loc[code]
+                rec["pe_ttm"] = float(s["pe_ttm"])
+                rec["pe_static"] = float(s["pe_static"])
+                rec["div_yield"] = float(s["div_yield"])
+            rows.append(rec)
+        return pd.DataFrame(rows)
 
     @staticmethod
     def _download_from_host(

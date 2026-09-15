@@ -429,6 +429,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_minute_time_data(market, code)` | 今日分时 |
 | `get_history_minute_time_data(market, code, date)` | 历史某日分时 |
 | `get_recent_minute_time_data(market, code, days=5)` | 最近 N 个交易日分时 |
+| `get_minute_aux(market, code, kind)` | 分时副图（买卖力道 / 成交对比，0x051b） |
 | `get_transaction_data(market, code, ...)` | 当日逐笔成交 |
 | `get_history_transaction_data(...)` | 历史逐笔成交 |
 | `get_fund_flow(market, code)` | 当日资金流向 |

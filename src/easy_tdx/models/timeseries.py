@@ -20,6 +20,22 @@ class MinuteBar:
 
 
 @dataclass
+class MinuteAuxPoint:
+    """分时副图数据点（0x051b，240 点）。
+
+    - ``buy_sell_strength`` 口径：``buy`` / ``sell`` 为买卖力道（协议为 u8）。
+    - ``volume_comparison`` 口径：``series_a`` / ``series_b`` 为成交对比两条序列（f32）。
+    """
+
+    index: int
+    buy: int = 0
+    sell: int = 0
+    series_a: float = 0.0
+    series_b: float = 0.0
+    _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
 class TransactionRecord:
     """逐笔成交记录
 

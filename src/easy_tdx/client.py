@@ -14,7 +14,13 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from ._df import _add_minute_datetime, _merge_bar_datetime, _merge_txn_datetime, _to_df
+from ._df import (
+    _add_minute_aux_time,
+    _add_minute_datetime,
+    _merge_bar_datetime,
+    _merge_txn_datetime,
+    _to_df,
+)
 from .codec.block import parse_block_dat
 from .codec.configdata import (
     fill_block_index_with_alias,
@@ -35,6 +41,7 @@ from .commands.block_info import GetBlockInfoCmd, GetBlockInfoMetaCmd
 from .commands.company_info import GetCompanyInfoCategoryCmd, GetCompanyInfoContentCmd
 from .commands.finance_info import GetFinanceInfoCmd
 from .commands.fund_flow import GetHistoryFundFlowCmd
+from .commands.minute_aux import GetMinuteAuxCmd, resolve_selector
 from .commands.minute_time import GetHistoryMinuteTimeDataCmd
 from .commands.report_file import GetReportFileCmd
 from .commands.security_bars import GetIndexBarsCmd, GetSecurityBarsCmd
@@ -750,6 +757,28 @@ class TdxClient:
         dates = sorted(int(pd.Timestamp(d).strftime("%Y%m%d")) for d in daily["date"])
         frames = [self.get_history_minute_time_data(market, code, d) for d in dates]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    def get_minute_aux(
+        self, market: Market, code: str, kind: str | int = "buy_sell_strength"
+    ) -> pd.DataFrame:
+        """获取分时副图（0x051b），240 点。
+
+        Args:
+            kind: ``"buy_sell_strength"``（买卖力道）或 ``"volume_comparison"``
+                （成交对比），也可直接传 selector 数字。
+        """
+        selector = resolve_selector(kind)
+        points = self._execute_std(GetMinuteAuxCmd(market, code, selector), require_nonempty=True)
+        volume_compare = selector == resolve_selector("volume_comparison")
+        rows = [
+            (
+                {"index": p.index, "series_a": p.series_a, "series_b": p.series_b}
+                if volume_compare
+                else {"index": p.index, "buy": p.buy, "sell": p.sell}
+            )
+            for p in points
+        ]
+        return _add_minute_aux_time(pd.DataFrame(rows))
 
     # ------------------------------------------------------------------ #
     # 逐笔成交
@@ -1621,6 +1650,25 @@ class AsyncTdxClient:
         dates = sorted(int(pd.Timestamp(d).strftime("%Y%m%d")) for d in daily["date"])
         frames = [await self.get_history_minute_time_data(market, code, d) for d in dates]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    async def get_minute_aux(
+        self, market: Market, code: str, kind: str | int = "buy_sell_strength"
+    ) -> pd.DataFrame:
+        """获取分时副图（0x051b），240 点（异步版）。"""
+        selector = resolve_selector(kind)
+        points = await self._execute_std(
+            GetMinuteAuxCmd(market, code, selector), require_nonempty=True
+        )
+        volume_compare = selector == resolve_selector("volume_comparison")
+        rows = [
+            (
+                {"index": p.index, "series_a": p.series_a, "series_b": p.series_b}
+                if volume_compare
+                else {"index": p.index, "buy": p.buy, "sell": p.sell}
+            )
+            for p in points
+        ]
+        return _add_minute_aux_time(pd.DataFrame(rows))
 
     async def get_transaction_data(
         self, market: Market, code: str, start: int, count: int = 800

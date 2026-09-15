@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import time
 from typing import Any
 
 import pandas as pd
@@ -125,4 +126,25 @@ def _add_minute_datetime(df: pd.DataFrame, date_int: int) -> pd.DataFrame:
     all_minutes = (morning + afternoon)[:n]
     offsets = pd.to_timedelta(all_minutes, unit="m")
     df.insert(0, "datetime", base + offsets)
+    return df
+
+
+def _add_minute_aux_time(df: pd.DataFrame) -> pd.DataFrame:
+    """为分时副图 DataFrame 添加 time 列。
+
+    副图点按“分钟结束”标注：index 0-119 = 9:31~11:30，120-239 = 13:01~15:00。
+    """
+    if df.empty or "index" not in df.columns:
+        return df
+    morning = list(range(9 * 60 + 31, 9 * 60 + 31 + 120))
+    afternoon = list(range(13 * 60 + 1, 13 * 60 + 1 + 120))
+    minutes = morning + afternoon
+    df.insert(
+        0,
+        "time",
+        [
+            time(minutes[i] // 60, minutes[i] % 60) if 0 <= i < len(minutes) else None
+            for i in df["index"]
+        ],
+    )
     return df

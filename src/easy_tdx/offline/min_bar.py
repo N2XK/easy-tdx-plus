@@ -44,19 +44,6 @@ _LC_MIN_DTYPE = np.dtype(
 )
 
 
-def _decode_tdx_date(num: int) -> tuple[int, int, int]:
-    """解码通达信压缩日期（2 字节）。"""
-    year = num // 2048 + 2004
-    month = (num % 2048) // 100
-    day = (num % 2048) % 100
-    return year, month, day
-
-
-def _decode_tdx_time(num: int) -> tuple[int, int]:
-    """解码通达信分钟时间（从 0:00 开始的分钟数）。"""
-    return num // 60, num % 60
-
-
 def _ymd(dates: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     base = dates % 2048
     return dates // 2048 + 2004, base // 100, base % 100

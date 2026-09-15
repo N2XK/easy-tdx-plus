@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/easy-tdx.svg)](https://pypi.org/project/easy-tdx/)
 
-通达信 TCP 行情协议客户端。支持 A 股、港股、美股、期货全市场；内置 `easy-tdx` CLI 工具，默认 JSON 输出，天然适配 Claude Code、OpenClaw、Hermes 等 AI Agent 工具链。提供同步 + asyncio 双接口；strict mypy 通过；每一层编解码都有离线 fixture 测试覆盖。
+通达信 TCP 行情协议客户端。支持 A 股、港股、美股、期货全市场；内置 `easy-tdx` CLI 工具，默认 JSON 输出，天然适配 Claude Code、OpenClaw、Hermes 等 AI Agent 工具链。提供同步 + asyncio 双接口；提供 strict mypy 配置；每一层编解码都有离线 fixture 测试覆盖。
 
 ## 安装
 

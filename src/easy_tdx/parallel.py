@@ -13,6 +13,7 @@ from queue import Empty, Queue
 from typing import Any, TypeVar
 
 from .client import TdxClient
+from .exceptions import TdxConnectionError
 
 _T = TypeVar("_T")
 _R = TypeVar("_R")
@@ -27,6 +28,7 @@ class ParallelTdx:
         host: 服务器地址（None 时用默认最佳主机）。
         connections: 连接数（也是默认并发度）。
         timeout: 单请求超时。
+        rate_limit: 是否为每个连接启用交易时段限流。
         client_factory: 自定义客户端工厂（测试注入用）。
     """
 
@@ -35,12 +37,15 @@ class ParallelTdx:
         host: str | None = None,
         connections: int = 4,
         timeout: float | None = None,
+        rate_limit: bool = False,
         client_factory: Callable[[], TdxClient] | None = None,
     ) -> None:
         self.host = host
         self.connections = max(1, connections)
         self.timeout = timeout
-        self._factory = client_factory or (lambda: TdxClient(host, timeout=timeout))
+        self._factory = client_factory or (
+            lambda: TdxClient(host, timeout=timeout, rate_limit=rate_limit)
+        )
         self._pool: Queue[TdxClient] = Queue()
         self._clients: list[TdxClient] = []
         self._lock = threading.Lock()
@@ -92,7 +97,17 @@ class ParallelTdx:
         def run(item: _T) -> _R:
             client = self._pool.get()
             try:
-                return func(client, item)
+                try:
+                    return func(client, item)
+                except TdxConnectionError:
+                    # 连接可能已失效：重建该连接后重试一次（读多写少场景安全）。
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+                    client = self._factory()
+                    client.connect()
+                    return func(client, item)
             finally:
                 self._pool.put(client)
 

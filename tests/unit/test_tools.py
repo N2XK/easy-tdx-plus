@@ -118,12 +118,16 @@ def test_classify_fund() -> None:
     assert classify_fund("510300") == "etf"
     assert classify_fund("sh510300") == "etf"
     assert classify_fund("159915") == "etf"
+    assert classify_fund("511010") == "etf"  # 债券 ETF 归 etf
     assert classify_fund("160105") == "lof"
     assert classify_fund("508000") == "reits"
     assert classify_fund("519003") == "otc"
     assert classify_fund("600519") is None
     assert classify_fund("000001") is None
-    assert is_fund("510300") and not is_fund("600519")
+    # 可转债不是基金
+    assert classify_fund("110059") is None
+    assert classify_fund("113050") is None
+    assert is_fund("510300") and not is_fund("600519") and not is_fund("110059")
 
 
 # --------------------------------------------------------------------------- #

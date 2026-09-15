@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
+from importlib.util import find_spec
 from pathlib import Path
 
 import pandas as pd
@@ -49,6 +50,7 @@ class Downloader:
         host: str | None = None,
         client_factory: Callable[[], TdxClient] | None = None,
         end_date: int | None = None,
+        rate_limit: bool = False,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +58,7 @@ class Downloader:
         self.host = host
         self._factory = client_factory
         self.end_date = end_date
+        self.rate_limit = rate_limit
         self.manifest_path = self.data_dir / "_manifest.json"
 
     # ------------------------------------------------------------------ #
@@ -91,11 +94,15 @@ class Downloader:
             df = pd.concat([existing, df], ignore_index=True)
         df = df.drop_duplicates(subset=["date"]).sort_values("date").reset_index(drop=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        if fmt == "parquet":
-            df.to_parquet(tmp, index=False)
-        else:
-            df.to_csv(tmp, index=False)
-        tmp.replace(path)
+        try:
+            if fmt == "parquet":
+                df.to_parquet(tmp, index=False)
+            else:
+                df.to_csv(tmp, index=False)
+            tmp.replace(path)
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------ #
     # 下载
@@ -111,6 +118,8 @@ class Downloader:
         """增量下载日线，返回 {key: 本次新增行数}。"""
         if fmt not in ("csv", "parquet"):
             raise ValueError("fmt 必须是 'csv' 或 'parquet'")
+        if fmt == "parquet" and find_spec("pyarrow") is None and find_spec("fastparquet") is None:
+            raise ValueError("fmt='parquet' 需要安装 pyarrow 或 fastparquet；或改用 fmt='csv'")
         manifest = self._load_manifest()
         end = self.end_date or _today()
 
@@ -130,7 +139,12 @@ class Downloader:
             return key, len(df)
 
         results: dict[str, int] = {}
-        with ParallelTdx(self.host, self.connections, client_factory=self._factory) as pool:
+        with ParallelTdx(
+            self.host,
+            self.connections,
+            rate_limit=self.rate_limit,
+            client_factory=self._factory,
+        ) as pool:
             for key, n in pool.map(work, list(stocks)):
                 results[key] = n
 

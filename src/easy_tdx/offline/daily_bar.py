@@ -78,7 +78,7 @@ def _detect_security_type(filename: str) -> str:
     return "SZ_A_STOCK"  # 默认按 A 股处理
 
 
-def _decode_daily(data: bytes, price_coeff: float, vol_coeff: float) -> np.ndarray:
+def _decode_daily(data: bytes) -> np.ndarray:
     """将整个 .day 文件向量化解析为结构化数组（仅完整记录）。"""
     n = len(data) // _DAILY_DTYPE.itemsize
     return np.frombuffer(data, dtype=_DAILY_DTYPE, count=n)
@@ -104,7 +104,7 @@ def read_daily_bars(filepath: str | Path) -> list[SecurityBar]:
     if len(data) < _DAILY_FMT.size:
         return []
 
-    arr = _decode_daily(data, price_coeff, vol_coeff)
+    arr = _decode_daily(data)
     size = _DAILY_DTYPE.itemsize
     date = arr["date"]
     year = (date // 10000).astype(int)
@@ -149,7 +149,7 @@ def read_daily_bars_df(filepath: str | Path) -> pd.DataFrame:
     data = filepath.read_bytes()
     if len(data) < _DAILY_FMT.size:
         return pd.DataFrame(columns=["date", "open", "close", "high", "low", "vol", "amount"])
-    arr = _decode_daily(data, price_coeff, vol_coeff)
+    arr = _decode_daily(data)
     date = arr["date"]
     return pd.DataFrame(
         {

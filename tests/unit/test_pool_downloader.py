@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from easy_tdx.downloader import Downloader
+from easy_tdx.exceptions import TdxConnectionError
 from easy_tdx.models.enums import KlineCategory, Market
 from easy_tdx.parallel import ParallelTdx
 
@@ -37,6 +39,29 @@ def test_parallel_map_preserves_order() -> None:
         result = pool.map(lambda c, x: x * 2, [1, 2, 3, 4, 5])
     assert result == [2, 4, 6, 8, 10]
     assert all(c.closed for c in created)
+
+
+def test_parallel_recreates_on_connection_error() -> None:
+    created: list[_FakeClient] = []
+
+    def factory() -> _FakeClient:
+        c = _FakeClient()
+        created.append(c)
+        return c
+
+    attempts: dict[int, int] = {}
+
+    def flaky(client: _FakeClient, item: int) -> int:
+        attempts[item] = attempts.get(item, 0) + 1
+        if attempts[item] == 1:
+            raise TdxConnectionError("boom")
+        return item
+
+    with ParallelTdx(connections=1, client_factory=factory) as pool:
+        result = pool.map(flaky, [1, 2])
+    assert result == [1, 2]
+    # 初始 1 个 + 每个 item 首次失败各重建 1 个
+    assert len(created) == 3
 
 
 def _bars(date_int: int) -> pd.DataFrame:
@@ -108,3 +133,13 @@ def test_downloader_skips_up_to_date(tmp_path: Path) -> None:
     r2 = dl.download_daily(stocks, start_date=20260101, fmt="csv")
     assert r2["sh600519"] == 0
     assert clients[-1].calls == []
+
+
+def test_downloader_parquet_requires_pyarrow(tmp_path: Path) -> None:
+    import importlib.util
+
+    if importlib.util.find_spec("pyarrow") or importlib.util.find_spec("fastparquet"):
+        pytest.skip("pyarrow/fastparquet 已安装")
+    dl = Downloader(tmp_path, connections=1, client_factory=_DownloadFakeClient, end_date=20991231)
+    with pytest.raises(ValueError, match="parquet"):
+        dl.download_daily([(Market.SH, "600519")], fmt="parquet")

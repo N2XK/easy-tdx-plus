@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from datetime import date
 from typing import Any
 
@@ -87,6 +89,8 @@ class F10Client:
         timeout: float = 8.0,
         retries: int = 2,
         transport: TqlexTransport | None = None,
+        cache: bool = False,
+        cache_ttl: float = 60.0,
     ) -> None:
         self.base_url = base_url
         self.limit_board_base_url = (
@@ -94,6 +98,17 @@ class F10Client:
         )
         self._transport = transport or TqlexTransport(base_url, timeout=timeout, retries=retries)
         self._injected = transport is not None
+        self._cache_enabled = cache
+        self._cache_ttl = cache_ttl
+        self._cache: dict[str, tuple[float, Any]] = {}
+
+    def clear_cache(self) -> None:
+        """清空结果缓存。"""
+        self._cache.clear()
+
+    @staticmethod
+    def _cache_key(entry: str, body: Any) -> str:
+        return f"{entry}|{json.dumps(body, ensure_ascii=False, sort_keys=True, default=str)}"
 
     # ------------------------------------------------------------------ #
     # 底层调用
@@ -107,7 +122,14 @@ class F10Client:
             raise ValueError("body 与 params 只能传一个")
         request_body = {"Params": list(params)} if params is not None else (body or {})
         base = self.limit_board_base_url if entry == ENTRY_LIMIT_BOARD_LADDER else self.base_url
+        key = self._cache_key(entry, request_body)
+        if self._cache_enabled:
+            hit = self._cache.get(key)
+            if hit is not None and (time.monotonic() - hit[0]) < self._cache_ttl:
+                return parse_tqlex_response(entry, request_body, hit[1])
         raw = self._transport_for(base).post(entry, request_body)
+        if self._cache_enabled:
+            self._cache[key] = (time.monotonic(), raw)
         return parse_tqlex_response(entry, request_body, raw)
 
     def _transport_for(self, base: str) -> TqlexTransport:
@@ -246,6 +268,29 @@ class F10Client:
             str(page),
             str(page_size),
         )
+
+    def company_news_all(
+        self,
+        code: str,
+        section: str = "gsyj",
+        *,
+        keyword: str = "",
+        rating: str | int = "0",
+        page_size: int = 20,
+        max_pages: int = 50,
+    ) -> list[dict[str, Any]]:
+        """公司资讯全量分页（自动翻页直到空页或不足一页）。"""
+        rows: list[dict[str, Any]] = []
+        for page in range(1, max_pages + 1):
+            resp = self.company_news(
+                code, section, keyword=keyword, rating=rating, page=page, page_size=page_size
+            )
+            if not resp.rows:
+                break
+            rows.extend(resp.rows)
+            if len(resp.rows) < page_size:
+                break
+        return rows
 
     def northbound_holding(
         self,

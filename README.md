@@ -437,6 +437,43 @@ bars = read_daily_bars(filepath)
 | `get_report_file(filename)` | 下载服务器文件 |
 | `get_market_stat()` | 全市场涨跌统计 |
 | `get_price_limits(market, code, name, pre_close)` | 涨跌停价 |
+| `get_zhb_files()` | 下载并解压 zhb.zip（46 个配置文件） |
+| `get_tdx_stat()` / `get_tdx_stat2()` | 个股统计 / 资金流+板块归属 |
+| `get_xgsg()` | 新股申购 |
+| `get_spblock()` | 大型指数成分（中证2000 等） |
+| `get_tdx_zs()` / `get_tdx_bk()` | 板块指数代码 / 简称↔全称 |
+| `get_tdx_hy()` | 行业归属（通达信 + 申万） |
+| `get_adjust_factors(market, code, ...)` | 仿射复权系数（对齐通达信） |
+| `get_fq_bars(market, code, mode, ...)` | 前复权（qfq）/ 后复权（hfq）日线 |
+| `get_basic_daily(market, code, ...)` | 前收盘 / 涨跌幅 / 换手率 / 市值 |
+| `get_stock_profile(stocks)` | 行情 + 股本 + 市值 + 换手 + 估值 汇总 |
+| `f10` 属性 | 7615 F10 客户端（`F10Client`） |
+
+### 加工数据 / 派生计算 / F10
+
+```python
+from easy_tdx import TdxClient, F10Client, Market
+
+with TdxClient.from_best_host() as c:
+    stat = c.get_tdx_stat()                       # 个股统计（PE/股息/区间涨幅）
+    sp = c.get_spblock()                          # 中证2000 等大型指数成分
+    qfq = c.get_fq_bars(Market.SH, "600519", mode="qfq")   # 本地 gbbq 仿射复权
+    profile = c.get_stock_profile([(Market.SH, "600519")])
+    profile_f10 = c.f10.company_profile("600519") # 7615 F10（HTTP 网关）
+
+# 独立使用 F10（无需 7709 连接）
+f10 = F10Client(timeout=8)
+rows = f10.finance_report("600519").rows         # 财务报表
+topics = f10.hot_topics("600519").rows           # 热点题材
+notices = f10.announcements("600519").rows       # 公告
+```
+
+F10 覆盖 20+ Entry：公司概况、财务报表、主营构成、分红融资、增发获配、个股总评、
+盈利预测、估值、题材行情、热点题材、题材内对比、公司资讯、北向持股、股东增减持、
+排名、治理、详情、公告/新闻/路演、涨跌停榜。未封装的 Entry 可用
+`F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`。
+
+更多示例见 [`examples/`](examples/)，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)。
 
 ## 架构
 
@@ -454,11 +491,19 @@ src/easy_tdx/
 │   ├── client.py      # ExTdxClient / AsyncExTdxClient（标准协议扩展市场）
 │   ├── mac_client.py  # MacExClient / AsyncMacExClient（MAC 协议扩展市场）
 │   └── transport/     # ExTdxConnection（端口 7727）
+├── f10/               # 7615 F10 / TQLEX（HTTP 网关）
+│   ├── client.py      # F10Client / AsyncF10Client
+│   ├── transport.py   # TQLEX HTTP 传输
+│   ├── parse.py       # 响应解析
+│   └── entries.py     # Entry 常量
+├── derive/            # 派生计算
+│   ├── adjust.py      # 仿射复权（前/后复权因子）
+│   └── basic.py       # 前收盘 / 换手率 / 市值
 ├── transport/
 │   ├── sync.py        # TdxConnection + ping_host / ping_all
 │   └── async_.py      # AsyncTdxConnection（asyncio）
 ├── commands/          # 标准协议命令（无 IO）
-├── codec/             # price / volume / datetime / frame / bitmap 编解码
+├── codec/             # price / volume / datetime / frame / bitmap / configdata 编解码
 ├── models/            # 纯 dataclass，无业务逻辑
 ├── offline/           # 离线数据读取模块
 └── cli/               # easy-tdx CLI（click）

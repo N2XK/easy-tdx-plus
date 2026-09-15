@@ -87,17 +87,23 @@
 | M2 · T3 派生计算 | ✅ 已完成 | `derive/adjust.py`、`derive/basic.py`、客户端 3 个方法、7 单测 |
 | M3 · T2 F10 首批 | ✅ 已完成 | `f10/`（transport/parse/models/entries/client）、`TdxClient.f10`、8 单测 |
 | M4 · T2 F10 二批 | ✅ 已完成 | stock_score/profit_forecast/ranking_detail/governance/company_news/limit_up_down_list/theme_market/allotment/topic_compare |
-| M5 · T4 Helpers | ⚠️ 部分 | `get_stock_profile`（行情+股本+市值+换手+估值）已完成；`auction_data` 用现有 `MacClient.get_auction`；`shortline_indicators`（竞价/开盘量比/封单/连板）**未实现** |
+| M5 · T4 Helpers | ⚠️ 部分 | `get_stock_profile` 已完成；`auction_data` 用现有 `MacClient.get_auction`；`shortline_indicators` 以 **示例脚本** `examples/24_shortline/` 提供（不入库 API） |
 | M5 · T5 落库 | ⏸ 未做 | DuckDB/ClickHouse ETL 与 `bfq/qfq/hfq` 视图（tdx2db 模式）**未实现**，依赖独立存储层，建议单独排期 |
 
 ### 实测（真实服务器）
 - tdxstat 8042 行；spblock 中证2000 = 2000；tdxhy 5659 行
-- 本地 gbbq 复权 vs MAC 服务端 QFQ：60 根，max diff 0.10 / mean 0.0017
+- **本地复权 vs 服务端 MAC QFQ：多只股票 mean_rel < 1e-4（仿射变换，对齐通达信）**
 - 换手率 600519 = 0.1101%、000001 = 0.3892%（与已知口径一致）
 - F10 16 个 Entry 全部返回数据（公司概况/财报 102 期/题材/公告 99 条/北向/涨停榜 84 条…）
+- 集成测试：`XMTDX_LIVE=1 pytest tests/integration/`（含上述 parity）全部通过
+
+### 复权口径说明（重要）
+早期版本采用 QUANTAXIS/tdx2db 的**纯乘法**因子，在跨现金分红区间与服务端
+存在偏差。经实测，通达信服务端/桌面端使用**仿射变换** `adjusted = mul×raw + add`
+（现金分红为减法）。本项目已改为仿射，与服务端逐日对齐（偏差 < 1e-4 相对误差）。
 
 ### 未实现（明确记录）
-1. `shortline_indicators`：依赖竞价 + 开盘量比 + 封单 + 连板等多源组合，逻辑复杂，暂缓。
-2. T5 落库：需要引入 DuckDB/ClickHouse 依赖，超出"协议库"边界，建议作为独立项目。
+1. `shortline_indicators`：库内**不提供**，改为示例脚本 `examples/24_shortline/shortline_indicators.py`。
+2. T5 落库：需要引入 DuckDB/ClickHouse 依赖，超出"协议库"边界，建议作为独立项目（依赖 easy_tdx）。
 3. 7615 未封装的其余 Entry：可用 `F10Client.call(entry, params=[...])` 手动调用。
 

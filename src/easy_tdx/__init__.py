@@ -26,7 +26,7 @@ from .ex.client import AsyncExTdxClient, ExTdxClient
 from .ex.mac_client import AsyncMacExClient, MacExClient
 from .ex.models import KNOWN_EX_HOSTS
 from .exceptions import TdxCommandError, TdxConnectionError, TdxDecodeError, TdxError
-from .f10 import F10Client, F10Response, F10ResultSet
+from .f10 import AsyncF10Client, F10Client, F10Response, F10ResultSet
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
     Adjust,
@@ -61,6 +61,7 @@ __all__ = [
     "TdxClient",
     "AsyncTdxClient",
     "F10Client",
+    "AsyncF10Client",
     "F10Response",
     "F10ResultSet",
     "MacClient",

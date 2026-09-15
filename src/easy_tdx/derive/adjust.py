@@ -1,9 +1,18 @@
-"""派生计算：复权（QFQ/HFQ）。
+"""派生计算：复权（QFQ/HFQ，仿射变换，对齐通达信）。
 
-复权算法参考 tdx2db（MIT）的 `calc/`（QUANTAXIS 口径）：
-除权日的理论前收盘
-    pre_close = (prev_close - 现金分红 + 配股比例 × 配股价) / (1 + 送转比例 + 配股比例)
-（分红/送转/配股均已归一化为“每股”口径，与 easy_tdx 的 XdxrRecord 一致。）
+通达信桌面端/服务器端的复权是 **仿射变换**：
+    adjusted = mul × raw + add
+其中现金分红是“减法”，送转/配股是“乘法”。这与 tdx2db/QUANTAXIS 的
+纯乘法因子不同——纯乘法在跨现金分红区间会与服务端产生偏差。
+
+单个除权除息事件（分红 c / 送转 b / 配股 r、配股价 p，均为每股口径）把
+事件前的价格映射到事件后基准：
+    F(x) = x / (1 + b + r) + (r*p - c) / (1 + b + r)   （即理论除权价）
+    等价于：ex_price = (x - c + r*p) / (1 + b + r)
+
+- 后复权（HFQ）：把每日价格换算到最早基准 = C_fwd(i) 的逆
+- 前复权（QFQ）：把每日价格换算到最新基准 = C_all ∘ C_fwd(i) 的逆
+其中 C_fwd(i) 为事件索引 ≤ i 的仿射复合。
 """
 
 from __future__ import annotations
@@ -20,10 +29,10 @@ __all__ = [
     "compute_pre_close_series",
 ]
 
+_Affine = tuple[float, float]  # (mul, add): x -> mul*x + add
+
 
 class _XdxrLike(Protocol):
-    """XdxrRecord 的结构子类型（避免运行时强依赖）。"""
-
     category: int
     year: int
     month: int
@@ -37,8 +46,24 @@ class _XdxrLike(Protocol):
 @dataclass
 class AdjustFactor:
     date: pd.Timestamp
-    hfq_factor: float
-    qfq_factor: float
+    hfq_mul: float
+    hfq_add: float
+    qfq_mul: float
+    qfq_add: float
+
+
+def _compose(outer: _Affine, inner: _Affine) -> _Affine:
+    """返回 outer ∘ inner：x -> outer(inner(x))。"""
+    m1, a1 = inner
+    m2, a2 = outer
+    return (m2 * m1, m2 * a1 + a2)
+
+
+def _inverse(t: _Affine) -> _Affine:
+    m, a = t
+    if m == 0:
+        return (1.0, 0.0)
+    return (1.0 / m, -a / m)
 
 
 def _event_index(
@@ -76,11 +101,27 @@ def _aggregate_events(bars: pd.DataFrame, events: list[Any]) -> dict[int, dict[s
     return by_idx
 
 
-def _theoretical_pre_close(prev_close: float, info: dict[str, float]) -> float:
+def _forward_transform(info: dict[str, float]) -> _Affine:
     denom = 1.0 + info["peigu"] + info["songzhuangu"]
     if denom == 0:
-        return prev_close
-    return (prev_close - info["fenhong"] + info["peigu"] * info["peigujia"]) / denom
+        return (1.0, 0.0)
+    return (1.0 / denom, (info["peigu"] * info["peigujia"] - info["fenhong"]) / denom)
+
+
+def _theoretical_pre_close(prev_close: float, info: dict[str, float]) -> float:
+    mul, add = _forward_transform(info)
+    return mul * prev_close + add
+
+
+def _cumulative_forward(df: pd.DataFrame, by_idx: dict[int, dict[str, float]]) -> list[_Affine]:
+    cum: _Affine = (1.0, 0.0)
+    out: list[_Affine] = []
+    for i in range(len(df)):
+        info = by_idx.get(i)
+        if info:
+            cum = _compose(_forward_transform(info), cum)
+        out.append(cum)
+    return out
 
 
 def compute_pre_close_series(bars: pd.DataFrame, events: list[Any] | None) -> pd.Series:
@@ -97,35 +138,32 @@ def compute_pre_close_series(bars: pd.DataFrame, events: list[Any] | None) -> pd
 
 
 def compute_adjust_factors(bars: pd.DataFrame, events: list[Any] | None) -> pd.DataFrame:
-    """计算与日线对齐的复权因子。
+    """计算与日线对齐的仿射复权系数。
 
-    - ``hfq_factor``：后复权因子（累乘），最早一根为 1。
-    - ``qfq_factor``：前复权因子，最新一根为 1。
+    - HFQ：最早一根为原始价（mul=1, add=0）
+    - QFQ：最新一根为原始价（mul=1, add=0）
     """
     df = bars.sort_values("date").reset_index(drop=True)
     by_idx = _aggregate_events(df, events or [])
-    closes = df["close"].astype(float).tolist()
+    cfwd = _cumulative_forward(df, by_idx)
+    c_all = cfwd[-1] if cfwd else (1.0, 0.0)
 
-    factors: list[float] = []
-    current = 1.0
+    dates = df["date"].reset_index(drop=True)
+    rows: list[AdjustFactor] = []
     for i in range(len(df)):
-        if i > 0:
-            info = by_idx.get(i)
-            if info:
-                prev_close = closes[i - 1]
-                theo = _theoretical_pre_close(prev_close, info)
-                if prev_close and theo:
-                    current *= prev_close / theo
-        factors.append(current)
-
-    last = factors[-1] if factors else 1.0
-    return pd.DataFrame(
-        {
-            "date": df["date"].reset_index(drop=True),
-            "hfq_factor": factors,
-            "qfq_factor": [f / last if last else f for f in factors],
-        }
-    )
+        inv = _inverse(cfwd[i])
+        hfq = inv
+        qfq = _compose(c_all, inv)
+        rows.append(
+            AdjustFactor(
+                date=dates.iloc[i],
+                hfq_mul=hfq[0],
+                hfq_add=hfq[1],
+                qfq_mul=qfq[0],
+                qfq_add=qfq[1],
+            )
+        )
+    return pd.DataFrame([r.__dict__ for r in rows])
 
 
 def adjust_bars(
@@ -145,12 +183,14 @@ def adjust_bars(
     if mode not in ("qfq", "hfq"):
         raise ValueError("mode 必须是 'qfq' 或 'hfq'")
     factors = compute_adjust_factors(bars, events)
-    col = f"{mode}_factor"
+    mul_col, add_col = f"{mode}_mul", f"{mode}_add"
     df = bars.sort_values("date").reset_index(drop=True).copy()
-    merged = df.merge(factors[["date", col]], on="date", how="left")
-    merged[col] = merged[col].fillna(1.0)
+    merged = df.merge(factors[["date", mul_col, add_col]], on="date", how="left")
+    merged[mul_col] = merged[mul_col].fillna(1.0)
+    merged[add_col] = merged[add_col].fillna(0.0)
     for price_col in ("open", "high", "low", "close"):
         if price_col in merged.columns:
-            merged[price_col] = (merged[price_col] * merged[col]).round(digits)
-    merged["factor"] = merged[col]
-    return merged.drop(columns=[col])
+            merged[price_col] = (merged[price_col] * merged[mul_col] + merged[add_col]).round(
+                digits
+            )
+    return merged.drop(columns=[mul_col, add_col])

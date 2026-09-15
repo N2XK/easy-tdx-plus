@@ -52,8 +52,10 @@ def test_compute_adjust_factors() -> None:
     bars = _bars([10.0, 5.0, 5.5])
     ev = [_Ev(category=1, year=2026, month=1, day=2, songzhuangu=1.0)]
     f = compute_adjust_factors(bars, ev)
-    assert f["hfq_factor"].tolist() == [1.0, 2.0, 2.0]
-    assert f["qfq_factor"].tolist() == [0.5, 1.0, 1.0]
+    assert f["hfq_mul"].tolist() == [1.0, 2.0, 2.0]
+    assert f["hfq_add"].tolist() == [0.0, 0.0, 0.0]
+    assert f["qfq_mul"].tolist() == [0.5, 1.0, 1.0]
+    assert f["qfq_add"].tolist() == [0.0, 0.0, 0.0]
 
 
 def test_adjust_bars_qfq_hfq() -> None:
@@ -91,8 +93,18 @@ def test_cash_dividend_pre_close() -> None:
     assert pre.iloc[1] == pytest.approx(9.5)
 
 
+def test_adjust_bars_cash_is_additive() -> None:
+    """现金分红应为仿射减法（对齐通达信），而非乘法。"""
+    bars = _bars([10.0, 9.5])
+    ev = [_Ev(category=1, year=2026, month=1, day=2, fenhong=0.5)]
+    qfq = adjust_bars(bars, ev, mode="qfq")
+    assert qfq["close"].tolist() == [9.5, 9.5]  # 前复权：历史价 -0.5
+    hfq = adjust_bars(bars, ev, mode="hfq")
+    assert hfq["close"].tolist() == [10.0, 10.0]  # 后复权：后续价 +0.5
+
+
 def test_non_category1_ignored() -> None:
     bars = _bars([10.0, 5.0])
     ev = [_Ev(category=5, year=2026, month=1, day=2, songzhuangu=1.0)]
     f = compute_adjust_factors(bars, ev)
-    assert f["hfq_factor"].tolist() == [1.0, 1.0]
+    assert f["hfq_mul"].tolist() == [1.0, 1.0]

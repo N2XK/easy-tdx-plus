@@ -55,6 +55,7 @@ from .config import (
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily
 from .exceptions import TdxConnectionError, TdxDecodeError
 from .f10 import F10Client
+from .fund import is_fund
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
 from .models.enums import KlineCategory, Market
@@ -65,6 +66,7 @@ from .models.finance import (
 from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
+from .ratelimit import RateLimiter
 from .transport.async_ import AsyncTdxConnection
 from .transport.sync import TdxConnection, ping_all
 
@@ -116,6 +118,8 @@ def _validate_yyyymmdd(value: int, name: str) -> None:
 
 # 在延迟优选时，最多探测前 N 台主机的标准协议能力，避免选用旧版/纯报价服务器。
 _STD_PROBE_LIMIT = 6
+# 主机标准协议能力探测结果缓存（进程内）。
+_STD_CAPABILITY_CACHE: dict[str, bool] = {}
 
 
 def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
@@ -123,7 +127,12 @@ def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
 
     通达信存在旧版/纯报价服务器，能完成握手但不响应实时行情等新命令。
     用一次真实行情请求作为能力探针，用于 from_best_host 的服务器优选。
+    结果按主机缓存（进程内），避免每次重连重复探测。
     """
+    key = f"{host}:{port}"
+    cached = _STD_CAPABILITY_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         conn = TdxConnection(host, port, timeout)
         conn.connect()
@@ -131,9 +140,11 @@ def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
             quotes = conn.execute(GetSecurityQuotesCmd([(Market.SH, "600519")]))
         finally:
             conn.close()
-        return bool(quotes)
+        result = bool(quotes)
     except Exception:
-        return False
+        result = False
+    _STD_CAPABILITY_CACHE[key] = result
+    return result
 
 
 def _record_signature(
@@ -274,6 +285,7 @@ class TdxClient:
         timeout: float | None = None,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
+        rate_limit: bool = False,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
@@ -283,6 +295,22 @@ class TdxClient:
         self._conn = TdxConnection(host, port, timeout)
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
+        self._limiter: RateLimiter | None = RateLimiter() if rate_limit else None
+        if self._limiter is not None:
+            self._limiter.auto_detect_phase()
+
+    def set_phase(self, phase: str) -> None:
+        """设置限流时段（仅当启用 ``rate_limit`` 时有效）。"""
+        if self._limiter is not None:
+            self._limiter.set_phase(phase)
+
+    def auto_detect_phase(self) -> str | None:
+        """按当前时间自动检测限流时段。"""
+        return self._limiter.auto_detect_phase() if self._limiter is not None else None
+
+    def _rate_acquire(self) -> None:
+        if self._limiter is not None:
+            self._limiter.acquire()
 
     @property
     def f10(self) -> F10Client:
@@ -386,6 +414,7 @@ class TdxClient:
 
     def _execute(self, cmd: "BaseCommand[_T]") -> _T:
         """执行命令；断线时指数退避重试。"""
+        self._rate_acquire()
         try:
             return self._conn.execute(cmd)
         except TdxConnectionError:
@@ -538,6 +567,23 @@ class TdxClient:
             _save_cache(all_stocks)
 
         return _to_df(all_stocks)
+
+    def get_fund_list(self, market: Market, pages: int | str = "all") -> pd.DataFrame:
+        """获取基金列表（ETF/LOF/REITs/分级/债券基金，按代码前缀识别）。
+
+        Args:
+            pages: "all" 拉取全部；整数 N 只拉前 N 页（每页 1000 条）。
+        """
+        count = self.get_security_count(market)
+        limit = count if pages == "all" else min(count, int(pages) * 1000)
+        funds: list[SecurityInfo] = []
+        for start in range(0, limit, 1000):
+            try:
+                stocks = self._execute(GetSecurityListCmd(market, start))
+            except Exception:
+                continue
+            funds.extend(s for s in stocks if is_fund(s.code))
+        return _to_df(funds)
 
     def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """批量获取实时五档行情（最多80只/次）。"""
@@ -1300,9 +1346,7 @@ class AsyncTdxClient:
         await self._conn.connect()
         save_best_host(host)
 
-    async def _execute_std(
-        self, cmd: "BaseCommand[_T]", *, require_nonempty: bool = False
-    ) -> _T:
+    async def _execute_std(self, cmd: "BaseCommand[_T]", *, require_nonempty: bool = False) -> _T:
         """执行标准协议数据命令，自动避开不支持该命令的服务器。
 
         ``TdxClient._execute_std`` 的 asyncio 对应实现。
@@ -1410,9 +1454,7 @@ class AsyncTdxClient:
         return _to_df(all_stocks)
 
     async def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
-        return _to_df(
-            await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True)
-        )
+        return _to_df(await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
 
     async def get_price_limits(
         self, market: Market, code: str, name: str, pre_close: float
@@ -1527,9 +1569,7 @@ class AsyncTdxClient:
         category: KlineCategory = KlineCategory.DAY,
     ) -> pd.DataFrame:
         """便捷获取某代码日期区间内的 K 线（自动推断市场，默认日线）。"""
-        return await self.get_bars_range(
-            _infer_market(code), code, start_date, end_date, category
-        )
+        return await self.get_bars_range(_infer_market(code), code, start_date, end_date, category)
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
         today = _today_in_shanghai()

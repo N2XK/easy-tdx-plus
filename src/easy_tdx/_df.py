@@ -28,6 +28,23 @@ def _to_df(data: Any) -> pd.DataFrame:
     raise TypeError(f"不支持转换为 DataFrame 的类型: {type(data)}")
 
 
+def to_tuples(data: Any) -> list[tuple[Any, ...]]:
+    """将 list[dataclass] / 单个 dataclass 转为 ``list[tuple]``。
+
+    丢弃以 ``_`` 开头的内部字段。相比构造 DataFrame，走 tuple 路径在大数据
+    遍历场景下更快（参考 tdxrs 的 tuple 快速模式）。
+    """
+    items = data if isinstance(data, list) else [data]
+    out: list[tuple[Any, ...]] = []
+    for item in items:
+        if is_dataclass(item) and not isinstance(item, type):
+            d = asdict(item)
+            out.append(tuple(v for k, v in d.items() if not k.startswith("_")))
+        else:
+            out.append(item if isinstance(item, tuple) else (item,))
+    return out
+
+
 def _clean_dict(item: Any) -> dict[str, Any]:
     d = asdict(item)
     d = {k: v for k, v in d.items() if not k.startswith("_")}

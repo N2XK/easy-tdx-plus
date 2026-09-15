@@ -20,13 +20,22 @@ asyncio 版本::
     asyncio.run(main())
 """
 
+from ._df import to_tuples
 from .client import AsyncTdxClient, TdxClient
 from .config import save_best_ex_host, save_best_host
+from .downloader import Downloader
 from .ex.client import AsyncExTdxClient, ExTdxClient
 from .ex.mac_client import AsyncMacExClient, MacExClient
 from .ex.models import KNOWN_EX_HOSTS
-from .exceptions import TdxCommandError, TdxConnectionError, TdxDecodeError, TdxError
+from .exceptions import (
+    TdxCommandError,
+    TdxConnectionError,
+    TdxDecodeError,
+    TdxError,
+    TdxValidationError,
+)
 from .f10 import AsyncF10Client, F10Client, F10Response, F10ResultSet
+from .fund import classify_fund, is_fund
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
     Adjust,
@@ -38,6 +47,8 @@ from .mac.enums import (
     SortOrder,
     SortType,
 )
+from .parallel import ParallelTdx
+from .ratelimit import RateLimiter, detect_phase
 from .models import (
     XDXR_CATEGORY_NAMES,
     CompanyInfoCategory,
@@ -55,6 +66,7 @@ from .models import (
 )
 from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, MAC_HOSTS, ping_all, ping_mac_all
 from .unified import AsyncUnifiedTdxClient, UnifiedTdxClient
+from .validation import check_bars, validate_bars
 
 __all__ = [
     # 客户端
@@ -98,6 +110,7 @@ __all__ = [
     "TdxConnectionError",
     "TdxDecodeError",
     "TdxCommandError",
+    "TdxValidationError",
     # 扩展行情
     "ExTdxClient",
     "AsyncExTdxClient",
@@ -105,6 +118,15 @@ __all__ = [
     # 工具
     "ping_all",
     "ping_mac_all",
+    "ParallelTdx",
+    "Downloader",
+    "RateLimiter",
+    "detect_phase",
+    "to_tuples",
+    "classify_fund",
+    "is_fund",
+    "check_bars",
+    "validate_bars",
     "KNOWN_HOSTS",
     "CALC_HOSTS",
     "MAC_HOSTS",

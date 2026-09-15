@@ -475,6 +475,35 @@ F10 覆盖 20+ Entry：公司概况、财务报表、主营构成、分红融资
 
 更多示例见 [`examples/`](examples/)，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)。
 
+### 并发 / 下载 / 限流 / 基金 / 校验
+
+```python
+from easy_tdx import ParallelTdx, Downloader, RateLimiter, Market, TdxClient
+
+# 连接池并发取数
+with ParallelTdx(connections=4) as pool:
+    results = pool.map(lambda c, it: (it[1], len(c.get_security_bars(it[0], it[1], ...))), codes)
+
+# 批量下载（增量 + 断点续传；每只一个文件 + _manifest.json）
+dl = Downloader("./data", connections=4)
+dl.download_daily([(Market.SH, "600519"), (Market.SZ, "000001")], fmt="csv")
+
+# 交易时段自适应限流（盘中 15 / 盘后 30 / 休市 60 req/s）
+with TdxClient(rate_limit=True) as c:
+    c.auto_detect_phase()        # 或 c.set_phase("trading")
+    bars = c.get_security_bars(Market.SH, "600519", KlineCategory.DAY, 0, 100)
+
+# 基金列表（ETF/LOF/REITs/分级/债券）
+funds = c.get_fund_list(Market.SH)
+```
+
+- `ParallelTdx`：N 连接并发，队列借用、互相隔离。
+- `Downloader`：按代码落盘 + `_manifest.json` 增量/续传，`fmt="csv"|"parquet"`。
+- `RateLimiter` / `detect_phase`：交易时段自适应限流。
+- `classify_fund` / `is_fund` / `get_fund_list`：基金识别。
+- `validate_bars` / `check_bars`：OHLC 关系 / 非有限值 / 负量校验。
+- `to_tuples`：dataclass → tuple 快速输出路径。
+
 ## 架构
 
 ```

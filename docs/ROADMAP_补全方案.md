@@ -107,3 +107,21 @@
 2. T5 落库：需要引入 DuckDB/ClickHouse 依赖，超出"协议库"边界，建议作为独立项目（依赖 easy_tdx）。
 3. 7615 未封装的其余 Entry：可用 `F10Client.call(entry, params=[...])` 手动调用。
 
+## 工程优化（参考 tdxrs）
+
+| 项 | 状态 | 交付 |
+| --- | --- | --- |
+| 交易时段自适应限流 | ✅ | `ratelimit.py`（`RateLimiter` / `detect_phase`），`TdxClient(rate_limit=True)` |
+| 连接池 / 并发 | ✅ | `parallel.py`（`ParallelTdx`，N 连接队列借用） |
+| 批量下载（增量+续传） | ✅ | `downloader.py`（`Downloader`，manifest + 原子写） |
+| tuple 快速输出 | ✅ | `_df.to_tuples` |
+| 基金 API | ✅ | `fund.py`（`classify_fund` / `is_fund`）、`TdxClient.get_fund_list` |
+| 响应语义校验 | ✅ | `validation.py`（`check_bars` / `validate_bars`）+ `TdxValidationError` |
+| 能力探测缓存 | ✅ | `_STD_CAPABILITY_CACHE`（进程内记忆） |
+| CI | ✅ | `.github/workflows/ci.yml`（pytest 阻断；ruff/mypy 信息性） |
+| 离线解析向量化 | ⏸ 未做 | 需 numpy 结构化解析，收益有限、改动大，暂缓 |
+| Rust 内核 | ❌ 不建议 | 违背纯 Python 定位；性能敏感用户可直接用 `tdxrs`（MIT） |
+
+> 设计原则：保持纯 Python、无额外运行时依赖（numpy/pandas 已是可选），
+> 不把存储层依赖塞进核心库。
+

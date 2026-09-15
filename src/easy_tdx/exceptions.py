@@ -23,3 +23,7 @@ class TdxFileNotFoundError(TdxError):
 
 class TdxOfflineError(TdxError):
     """离线数据读取失败（路径未配置、文件格式错误等）"""
+
+
+class TdxValidationError(TdxError):
+    """响应数据未通过语义校验（字段越界、OHLC 关系非法等）"""

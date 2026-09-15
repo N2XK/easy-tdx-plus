@@ -16,6 +16,17 @@ import pandas as pd
 
 from ._df import _add_minute_datetime, _merge_bar_datetime, _merge_txn_datetime, _to_df
 from .codec.block import parse_block_dat
+from .codec.configdata import (
+    fill_block_index_with_alias,
+    parse_spblock,
+    parse_tdxbk,
+    parse_tdxhy,
+    parse_tdxstat,
+    parse_tdxstat2,
+    parse_tdxzs,
+    parse_xgsg,
+    unzip_zhb,
+)
 from .codec.financial import parse_financial_dat, parse_financial_file_list
 from .codec.industry import parse_tdxhy_cfg
 from .codec.price_rules import compute_price_limits, get_no_limit_window_days
@@ -41,8 +52,10 @@ from .config import (
     get_timeout,
     save_best_host,
 )
+from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily
 from .exceptions import TdxConnectionError, TdxDecodeError
 from .models.bar import SecurityBar
+from .models.configdata import SpBlock
 from .models.enums import KlineCategory, Market
 from .models.finance import (
     FinancialFileInfo,
@@ -267,6 +280,7 @@ class TdxClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._conn = TdxConnection(host, port, timeout)
+        self._zhb_cache: dict[str, bytes] | None = None
 
     # ------------------------------------------------------------------ #
     # 工厂方法：自动优选最低延迟服务器
@@ -752,6 +766,128 @@ class TdxClient:
                 break
         return bytes(full_data)
 
+    # ------------------------------------------------------------------ #
+    # 配置类加工数据（zhb.zip / tdxhy.cfg）
+    # ------------------------------------------------------------------ #
+
+    def get_zhb_files(self) -> dict[str, bytes]:
+        """下载并解压 zhb.zip，返回 {文件名: 原始字节}（结果缓存于实例）。
+
+        zhb.zip 含 46 个配置文件（tdxstat.cfg / spblock.dat / tdxzs.cfg /
+        tdxbk.cfg / xgsg.cfg 等），是配置类加工数据的来源。
+        """
+        if self._zhb_cache is not None:
+            return self._zhb_cache
+        self._zhb_cache = unzip_zhb(self.get_report_file("zhb.zip"))
+        return self._zhb_cache
+
+    def _zhb_member(self, filename: str) -> bytes:
+        return self.get_zhb_files().get(filename, b"")
+
+    def get_tdx_stat(self) -> pd.DataFrame:
+        """个股综合统计（tdxstat.cfg）：PE(TTM)/静态PE/股息率/连涨跌/区间涨幅等。"""
+        return _to_df(parse_tdxstat(self._zhb_member("tdxstat.cfg")))
+
+    def get_tdx_stat2(self) -> pd.DataFrame:
+        """个股资金流向 + 板块归属（tdxstat2.cfg）：成交额/IPO价/52周高低/板块指数。"""
+        return _to_df(parse_tdxstat2(self._zhb_member("tdxstat2.cfg")))
+
+    def get_xgsg(self) -> pd.DataFrame:
+        """新股申购（xgsg.cfg）：申购代码/日期/发行价/名称。"""
+        return _to_df(parse_xgsg(self._zhb_member("xgsg.cfg")))
+
+    def get_spblock(self, fill_index: bool = True) -> list[SpBlock]:
+        """专业板块成分（spblock.dat），如 中证2000/1000/500 等大型指数。
+
+        Args:
+            fill_index: 是否用 tdxzs/tdxbk 回填板块指数代码到 ``SpBlock.index``。
+        """
+        blocks = parse_spblock(self._zhb_member("spblock.dat"))
+        if fill_index and blocks:
+            zs = parse_tdxzs(self._zhb_member("tdxzs.cfg"))
+            bk = parse_tdxbk(self._zhb_member("tdxbk.cfg"))
+            fill_block_index_with_alias(blocks, zs, bk)
+        return blocks
+
+    def get_tdx_zs(self) -> pd.DataFrame:
+        """板块指数配置（tdxzs.cfg）：板块名称 → 指数代码。"""
+        return _to_df(parse_tdxzs(self._zhb_member("tdxzs.cfg")))
+
+    def get_tdx_bk(self) -> pd.DataFrame:
+        """板块简称↔全称（tdxbk.cfg）。"""
+        return _to_df(parse_tdxbk(self._zhb_member("tdxbk.cfg")))
+
+    def get_tdx_hy(self) -> pd.DataFrame:
+        """行业归属（tdxhy.cfg）：通达信行业 + 申万行业。"""
+        return _to_df(parse_tdxhy(self.get_report_file("tdxhy.cfg")))
+
+    # ------------------------------------------------------------------ #
+    # 派生计算（复权 / 基础指标）
+    # ------------------------------------------------------------------ #
+
+    def _daily_bars_with_xdxr(
+        self, market: Market, code: str, start_date: int, end_date: int
+    ) -> tuple[pd.DataFrame, list[Any]]:
+        bars = self.get_bars_range(market, code, start_date, end_date, KlineCategory.DAY)
+        events = self._execute(GetXdxrInfoCmd(market, code))
+        return bars, events
+
+    def get_adjust_factors(
+        self, market: Market, code: str, start_date: int = 19900101, end_date: int | None = None
+    ) -> pd.DataFrame:
+        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件）。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        return compute_adjust_factors(bars, events)
+
+    def get_fq_bars(
+        self,
+        market: Market,
+        code: str,
+        mode: str = "qfq",
+        start_date: int = 19900101,
+        end_date: int | None = None,
+    ) -> pd.DataFrame:
+        """获取前复权（qfq）/ 后复权（hfq）日线（本地按 gbbq 计算）。
+
+        替代：MAC 协议 ``get_stock_kline(adjust=...)`` 由服务端计算，两者口径略有差异。
+        """
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        return adjust_bars(bars, events, mode=mode)
+
+    def get_basic_daily(
+        self,
+        market: Market,
+        code: str,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        float_shares: float | None = None,
+        total_shares: float | None = None,
+    ) -> pd.DataFrame:
+        """每日基础指标：前收盘 / 涨跌幅 / 振幅 / 换手率 / 市值。
+
+        股本默认取最新财务数据（单位：股）；如需历史股本请自行传入。
+        """
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        if float_shares is None or total_shares is None:
+            fin = self.get_finance_info(market, code)
+            if not fin.empty:
+                if float_shares is None:
+                    float_shares = float(fin.iloc[0].get("liutong_guben", 0.0) or 0.0)
+                if total_shares is None:
+                    total_shares = float(fin.iloc[0].get("zong_guben", 0.0) or 0.0)
+        return compute_basic_daily(
+            bars,
+            events,
+            float_shares=float_shares or 0.0,
+            total_shares=total_shares or 0.0,
+        )
+
     @staticmethod
     def _download_from_host(
         host: str, filename: str, port: int = 7709, timeout: float = 15.0
@@ -983,6 +1119,7 @@ class AsyncTdxClient:
         self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
+        self._zhb_cache: dict[str, bytes] | None = None
 
     @classmethod
     def from_best_host(
@@ -1412,6 +1549,53 @@ class AsyncTdxClient:
             if len(chunk) < chunk_size:
                 break
         return bytes(full_data)
+
+    # ------------------------------------------------------------------ #
+    # 配置类加工数据（zhb.zip / tdxhy.cfg）
+    # ------------------------------------------------------------------ #
+
+    async def get_zhb_files(self) -> dict[str, bytes]:
+        """下载并解压 zhb.zip，返回 {文件名: 原始字节}（结果缓存于实例）。"""
+        if self._zhb_cache is not None:
+            return self._zhb_cache
+        self._zhb_cache = unzip_zhb(await self.get_report_file("zhb.zip"))
+        return self._zhb_cache
+
+    async def get_tdx_stat(self) -> pd.DataFrame:
+        """个股综合统计（tdxstat.cfg）。"""
+        return _to_df(parse_tdxstat((await self.get_zhb_files()).get("tdxstat.cfg", b"")))
+
+    async def get_tdx_stat2(self) -> pd.DataFrame:
+        """个股资金流向 + 板块归属（tdxstat2.cfg）。"""
+        return _to_df(parse_tdxstat2((await self.get_zhb_files()).get("tdxstat2.cfg", b"")))
+
+    async def get_xgsg(self) -> pd.DataFrame:
+        """新股申购（xgsg.cfg）。"""
+        return _to_df(parse_xgsg((await self.get_zhb_files()).get("xgsg.cfg", b"")))
+
+    async def get_spblock(self, fill_index: bool = True) -> list[SpBlock]:
+        """专业板块成分（spblock.dat）。"""
+        files = await self.get_zhb_files()
+        blocks = parse_spblock(files.get("spblock.dat", b""))
+        if fill_index and blocks:
+            fill_block_index_with_alias(
+                blocks,
+                parse_tdxzs(files.get("tdxzs.cfg", b"")),
+                parse_tdxbk(files.get("tdxbk.cfg", b"")),
+            )
+        return blocks
+
+    async def get_tdx_zs(self) -> pd.DataFrame:
+        """板块指数配置（tdxzs.cfg）。"""
+        return _to_df(parse_tdxzs((await self.get_zhb_files()).get("tdxzs.cfg", b"")))
+
+    async def get_tdx_bk(self) -> pd.DataFrame:
+        """板块简称↔全称（tdxbk.cfg）。"""
+        return _to_df(parse_tdxbk((await self.get_zhb_files()).get("tdxbk.cfg", b"")))
+
+    async def get_tdx_hy(self) -> pd.DataFrame:
+        """行业归属（tdxhy.cfg）。"""
+        return _to_df(parse_tdxhy(await self.get_report_file("tdxhy.cfg")))
 
     @staticmethod
     async def _async_download_from_host(

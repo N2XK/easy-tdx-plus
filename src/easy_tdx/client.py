@@ -9,7 +9,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -32,7 +32,15 @@ from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
-from .config import get_best_host, get_calc_hosts, get_known_hosts, get_port, get_timeout, save_best_host
+from .config import (
+    get_best_host,
+    get_calc_hosts,
+    get_full_featured_hosts,
+    get_known_hosts,
+    get_port,
+    get_timeout,
+    save_best_host,
+)
 from .exceptions import TdxConnectionError, TdxDecodeError
 from .models.bar import SecurityBar
 from .models.enums import KlineCategory, Market
@@ -62,6 +70,28 @@ _DAILY_PLUS = frozenset(
 
 def _today_in_shanghai() -> int:
     return int(datetime.now(_SHANGHAI_TZ).strftime("%Y%m%d"))
+
+
+# 在延迟优选时，最多探测前 N 台主机的标准协议能力，避免选用旧版/纯报价服务器。
+_STD_PROBE_LIMIT = 6
+
+
+def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
+    """探测主机是否支持标准协议实时行情。
+
+    通达信存在旧版/纯报价服务器，能完成握手但不响应实时行情等新命令。
+    用一次真实行情请求作为能力探针，用于 from_best_host 的服务器优选。
+    """
+    try:
+        conn = TdxConnection(host, port, timeout)
+        conn.connect()
+        try:
+            quotes = conn.execute(GetSecurityQuotesCmd([(Market.SH, "600519")]))
+        finally:
+            conn.close()
+        return bool(quotes)
+    except Exception:
+        return False
 
 
 def _record_signature(
@@ -224,7 +254,7 @@ class TdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
     ) -> "TdxClient":
-        """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。
+        """测量 hosts 中所有服务器延迟，选最低延迟且支持标准协议的建立连接。
 
         自动将最佳主机保存到 config.json，后续连接默认使用该主机。
         若所有服务器均不可达，回退到 hosts[0]。
@@ -237,6 +267,11 @@ class TdxClient:
             timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
         best = ranked[0][0] if ranked else hosts[0]
+        # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
+        for host, _latency in ranked[:_STD_PROBE_LIMIT]:
+            if _probe_standard_capability(host, port, timeout):
+                best = host
+                break
         save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
@@ -329,31 +364,50 @@ class TdxClient:
             self._conn.start_heartbeat(self._heartbeat_interval)
         save_best_host(host)
 
-    def _execute_bars(self, cmd: "BaseCommand[_T]") -> _T:
-        """执行标准协议 K 线命令，自动避开不支持该命令的服务器。
+    def _execute_std(self, cmd: "BaseCommand[_T]", *, require_nonempty: bool = False) -> _T:
+        """执行标准协议数据命令，自动避开不支持该命令的服务器。
 
-        通达信存在只提供报价、不响应标准协议 K 线的服务器。若当前服务器
-        返回残缺响应导致解码失败，则依次尝试其他候选主机，成功后复用该主机。
+        通达信存在旧版/纯报价服务器，不响应实时行情、逐笔成交、标准协议
+        K 线等命令，会返回残缺响应（解码失败）或空结果。若当前服务器出现
+        这两种情况，则依次尝试全功能主机，成功后复用该主机。
+
+        Args:
+            require_nonempty: 为 True 时空结果也视为异常并触发回退
+                （适用于正常必有数据的命令，如行情、逐笔成交）。
         """
+        empty_result: Any = None
+        last_exc: TdxDecodeError | None
         try:
-            return self._execute(cmd)
-        except TdxDecodeError:
-            for host in get_known_hosts():
-                if host == self._host:
-                    continue
+            result = self._execute(cmd)
+            if result or not require_nonempty:
+                return result
+            empty_result = result
+            last_exc = None
+        except TdxDecodeError as exc:
+            empty_result = None
+            last_exc = exc
+
+        for host in get_full_featured_hosts():
+            if host == self._host:
+                continue
+            try:
+                conn = TdxConnection(host, self._port, self._timeout)
+                conn.connect()
                 try:
-                    conn = TdxConnection(host, self._port, self._timeout)
-                    conn.connect()
-                    try:
-                        result = conn.execute(cmd)
-                    finally:
-                        conn.close()
-                except Exception:
-                    continue
-                if result:
-                    self._switch_host(host)
-                    return result
-            raise
+                    result = conn.execute(cmd)
+                finally:
+                    conn.close()
+            except Exception:
+                continue
+            if result or not require_nonempty:
+                self._switch_host(host)
+                return result
+            empty_result = result
+            last_exc = None
+
+        if last_exc is not None:
+            raise last_exc
+        return cast("_T", empty_result)
 
     # ------------------------------------------------------------------ #
     # 市场信息
@@ -436,7 +490,7 @@ class TdxClient:
 
     def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """批量获取实时五档行情（最多80只/次）。"""
-        return _to_df(self._execute(GetSecurityQuotesCmd(stocks)))
+        return _to_df(self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
 
     def get_price_limits(
         self, market: Market, code: str, name: str, pre_close: float
@@ -477,7 +531,11 @@ class TdxClient:
         count: int = 800,
     ) -> pd.DataFrame:
         """获取 K 线数据（最多800条/次，按 start 分页）。"""
-        df = _to_df(self._execute_bars(GetSecurityBarsCmd(market, code, category, start, count)))
+        df = _to_df(
+            self._execute_std(
+                GetSecurityBarsCmd(market, code, category, start, count), require_nonempty=True
+            )
+        )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     def get_index_bars(
@@ -489,7 +547,11 @@ class TdxClient:
         count: int = 800,
     ) -> pd.DataFrame:
         """获取指数 K 线数据。"""
-        df = _to_df(self._execute_bars(GetIndexBarsCmd(market, code, category, start, count)))
+        df = _to_df(
+            self._execute_std(
+                GetIndexBarsCmd(market, code, category, start, count), require_nonempty=True
+            )
+        )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     # ------------------------------------------------------------------ #
@@ -515,14 +577,23 @@ class TdxClient:
         self, market: Market, code: str, start: int, count: int = 800
     ) -> pd.DataFrame:
         """获取当日逐笔成交（分页）。"""
-        df = _to_df(self._execute(GetTransactionDataCmd(market, code, start, count)))
+        df = _to_df(
+            self._execute_std(
+                GetTransactionDataCmd(market, code, start, count), require_nonempty=True
+            )
+        )
         return _merge_txn_datetime(df, _today_in_shanghai())
 
     def get_history_transaction_data(
         self, market: Market, code: str, date: int, start: int, count: int = 800
     ) -> pd.DataFrame:
         """获取历史逐笔成交（date: YYYYMMDD，分页）。"""
-        df = _to_df(self._execute(GetHistoryTransactionDataCmd(market, code, date, start, count)))
+        df = _to_df(
+            self._execute_std(
+                GetHistoryTransactionDataCmd(market, code, date, start, count),
+                require_nonempty=True,
+            )
+        )
         return _merge_txn_datetime(df, date)
 
     # ------------------------------------------------------------------ #
@@ -836,6 +907,11 @@ class AsyncTdxClient:
             timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
         best = ranked[0][0] if ranked else hosts[0]
+        # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
+        for host, _latency in ranked[:_STD_PROBE_LIMIT]:
+            if _probe_standard_capability(host, port, timeout):
+                best = host
+                break
         save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
@@ -932,29 +1008,45 @@ class AsyncTdxClient:
         await self._conn.connect()
         save_best_host(host)
 
-    async def _execute_bars(self, cmd: "BaseCommand[_T]") -> _T:
-        """执行标准协议 K 线命令，自动避开不支持该命令的服务器。
+    async def _execute_std(
+        self, cmd: "BaseCommand[_T]", *, require_nonempty: bool = False
+    ) -> _T:
+        """执行标准协议数据命令，自动避开不支持该命令的服务器。
 
-        同步版的 asyncio 对应实现，逻辑与 ``TdxClient._execute_bars`` 一致。
+        ``TdxClient._execute_std`` 的 asyncio 对应实现。
         """
+        empty_result: Any = None
+        last_exc: TdxDecodeError | None
         try:
-            return await self._execute(cmd)
-        except TdxDecodeError:
-            for host in get_known_hosts():
-                if host == self._host:
-                    continue
-                conn = AsyncTdxConnection(host, self._port, self._timeout)
-                try:
-                    await conn.connect()
-                    result = await conn.execute(cmd)
-                except Exception:
-                    continue
-                finally:
-                    await conn.close()
-                if result:
-                    await self._switch_host(host)
-                    return result
-            raise
+            result = await self._execute(cmd)
+            if result or not require_nonempty:
+                return result
+            empty_result = result
+            last_exc = None
+        except TdxDecodeError as exc:
+            empty_result = None
+            last_exc = exc
+
+        for host in get_full_featured_hosts():
+            if host == self._host:
+                continue
+            conn = AsyncTdxConnection(host, self._port, self._timeout)
+            try:
+                await conn.connect()
+                result = await conn.execute(cmd)
+            except Exception:
+                continue
+            finally:
+                await conn.close()
+            if result or not require_nonempty:
+                await self._switch_host(host)
+                return result
+            empty_result = result
+            last_exc = None
+
+        if last_exc is not None:
+            raise last_exc
+        return cast("_T", empty_result)
 
     async def get_security_count(self, market: Market) -> int:
         return await self._execute(GetSecurityCountCmd(market))
@@ -1026,7 +1118,9 @@ class AsyncTdxClient:
         return _to_df(all_stocks)
 
     async def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
-        return _to_df(await self._execute(GetSecurityQuotesCmd(stocks)))
+        return _to_df(
+            await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True)
+        )
 
     async def get_price_limits(
         self, market: Market, code: str, name: str, pre_close: float
@@ -1060,7 +1154,9 @@ class AsyncTdxClient:
         count: int = 800,
     ) -> pd.DataFrame:
         df = _to_df(
-            await self._execute_bars(GetSecurityBarsCmd(market, code, category, start, count))
+            await self._execute_std(
+                GetSecurityBarsCmd(market, code, category, start, count), require_nonempty=True
+            )
         )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
@@ -1072,7 +1168,11 @@ class AsyncTdxClient:
         start: int,
         count: int = 800,
     ) -> pd.DataFrame:
-        df = _to_df(await self._execute_bars(GetIndexBarsCmd(market, code, category, start, count)))
+        df = _to_df(
+            await self._execute_std(
+                GetIndexBarsCmd(market, code, category, start, count), require_nonempty=True
+            )
+        )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
@@ -1089,14 +1189,21 @@ class AsyncTdxClient:
     async def get_transaction_data(
         self, market: Market, code: str, start: int, count: int = 800
     ) -> pd.DataFrame:
-        df = _to_df(await self._execute(GetTransactionDataCmd(market, code, start, count)))
+        df = _to_df(
+            await self._execute_std(
+                GetTransactionDataCmd(market, code, start, count), require_nonempty=True
+            )
+        )
         return _merge_txn_datetime(df, _today_in_shanghai())
 
     async def get_history_transaction_data(
         self, market: Market, code: str, date: int, start: int, count: int = 800
     ) -> pd.DataFrame:
         df = _to_df(
-            await self._execute(GetHistoryTransactionDataCmd(market, code, date, start, count))
+            await self._execute_std(
+                GetHistoryTransactionDataCmd(market, code, date, start, count),
+                require_nonempty=True,
+            )
         )
         return _merge_txn_datetime(df, date)
 

@@ -202,6 +202,19 @@ def get_known_hosts() -> list[str]:
     return _merge_hosts(list(_FALLBACK_HOSTS), cfg.get("known_hosts", []))
 
 
+def get_full_featured_hosts() -> list[str]:
+    """返回已验证支持全部标准协议命令的全功能服务器列表。
+
+    通达信部分服务器为旧版/纯报价节点，不响应实时行情、逐笔成交、
+    标准协议 K 线等命令（返回残缺或空响应）。这些全功能节点可作为
+    自动回退的目标主机。
+    """
+    env = os.environ.get("EASY_TDX_FULL_HOSTS")
+    if env:
+        return [h.strip() for h in env.split(",") if h.strip()]
+    return list(_KLINE_CAPABLE_HOSTS)
+
+
 def get_calc_hosts() -> list[str]:
     """返回计算服务器列表。"""
     cfg = _load()

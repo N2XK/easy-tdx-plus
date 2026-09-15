@@ -32,7 +32,6 @@ from .commands import (
     TickChartsCmd,
     UnusualCmd,
 )
-from .commands.chart_sampling import ChartSamplingCmd
 from .commands.file_query import FileDownloadCmd, FileListCmd
 from .commands.goods_list import GoodsListCmd
 from ..codec.bitmap import Fields, PresetField
@@ -426,12 +425,16 @@ class MacClient:
     def get_chart_sampling(self, market: int, code: str) -> pd.DataFrame:
         """获取分时缩略采样价格点（240 个点）。
 
+        A 股分时缩略采样复用 MAC 分时图命令（0x122D），返回当日每分钟
+        一个价格点（共 240 点）。原 0x254D 缩略采样命令仅在扩展市场
+        （端口 7727）有效，在 A 股端口（7709）不会响应，故此处改用 0x122D。
+
         Args:
             market: 市场代码。
             code: 股票代码。
         """
-        prices = self._execute(ChartSamplingCmd(market, code))
-        return pd.DataFrame({"price": prices})
+        chart = self._execute(SymbolTickChartCmd(market, code))
+        return pd.DataFrame({"price": [tick.price for tick in chart.charts]})
 
     # ------------------------------------------------------------------ #
     # 逐笔成交
@@ -1034,8 +1037,8 @@ class AsyncMacClient:
         return pd.DataFrame(_flatten_multi_tick_chart(chart))
 
     async def get_chart_sampling(self, market: int, code: str) -> pd.DataFrame:
-        prices = await self._execute(ChartSamplingCmd(market, code))
-        return pd.DataFrame({"price": prices})
+        chart = await self._execute(SymbolTickChartCmd(market, code))
+        return pd.DataFrame({"price": [tick.price for tick in chart.charts]})
 
     # ------------------------------------------------------------------ #
     # 逐笔成交

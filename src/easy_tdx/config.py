@@ -36,7 +36,22 @@ _CONFIG_FILE = _CONFIG_DIR / "config.json"
 # 源码内嵌默认值（config.json 不存在或字段缺失时的兜底）
 # ---------------------------------------------------------------------------
 
+# 已验证支持标准协议 K 线（get_security_bars / get_index_bars）的服务器。
+# 通达信部分纯报价服务器不响应标准 K 线命令（返回 2 字节残缺响应），
+# 故将这些主机置于候选列表最前，保证延迟优选后仍能取到 K 线数据。
+_KLINE_CAPABLE_HOSTS: list[str] = [
+    "59.36.5.11",
+    "117.34.114.14",
+    "117.34.114.15",
+    "117.34.114.16",
+    "117.34.114.17",
+    "117.34.114.18",
+    "117.34.114.20",
+    "117.34.114.27",
+]
+
 _FALLBACK_HOSTS: list[str] = [
+    *_KLINE_CAPABLE_HOSTS,
     "111.229.247.189",
     "150.158.160.2",
     "180.153.18.170",
@@ -155,6 +170,20 @@ def _save(data: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _merge_hosts(primary: list[str], extra: list[str]) -> list[str]:
+    """合并主机列表：保留 primary 顺序，追加 extra 中未出现的主机。
+
+    config.json 中的主机列表是首次运行时写入的快照，会掩盖后续版本新增
+    的内置主机。这里以内置列表为主、已保存列表为辅做并集，保证新增主机
+    （如支持标准协议 K 线的服务器）始终可用。
+    """
+    merged = list(primary)
+    for host in extra:
+        if host not in merged:
+            merged.append(host)
+    return merged
+
+
 def get_best_host() -> str:
     """返回当前最佳主机地址。优先级：环境变量 > config.json > 默认列表首个。"""
     env = os.environ.get("EASY_TDX_HOST")
@@ -170,25 +199,25 @@ def get_known_hosts() -> list[str]:
     if env:
         return [h.strip() for h in env.split(",") if h.strip()]
     cfg = _load()
-    return cfg.get("known_hosts", list(_FALLBACK_HOSTS))
+    return _merge_hosts(list(_FALLBACK_HOSTS), cfg.get("known_hosts", []))
 
 
 def get_calc_hosts() -> list[str]:
     """返回计算服务器列表。"""
     cfg = _load()
-    return cfg.get("calc_hosts", list(_FALLBACK_CALC_HOSTS))
+    return _merge_hosts(list(_FALLBACK_CALC_HOSTS), cfg.get("calc_hosts", []))
 
 
 def get_mac_hosts() -> list[str]:
     """返回 MAC 行情服务器列表。"""
     cfg = _load()
-    return cfg.get("mac_hosts", list(_FALLBACK_MAC_HOSTS))
+    return _merge_hosts(list(_FALLBACK_MAC_HOSTS), cfg.get("mac_hosts", []))
 
 
 def get_ex_hosts() -> list[str]:
     """返回扩展行情服务器列表。"""
     cfg = _load()
-    return cfg.get("ex_hosts", list(_FALLBACK_EX_HOSTS))
+    return _merge_hosts(list(_FALLBACK_EX_HOSTS), cfg.get("ex_hosts", []))
 
 
 def get_best_ex_host() -> str:
@@ -203,7 +232,7 @@ def get_best_ex_host() -> str:
 def get_mac_ex_hosts() -> list[str]:
     """返回 MAC 协议扩展行情服务器列表。"""
     cfg = _load()
-    return cfg.get("mac_ex_hosts", list(_FALLBACK_MAC_EX_HOSTS))
+    return _merge_hosts(list(_FALLBACK_MAC_EX_HOSTS), cfg.get("mac_ex_hosts", []))
 
 
 def get_best_mac_ex_host() -> str:

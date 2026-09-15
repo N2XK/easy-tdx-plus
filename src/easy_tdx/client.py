@@ -33,7 +33,7 @@ from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
 from .config import get_best_host, get_calc_hosts, get_known_hosts, get_port, get_timeout, save_best_host
-from .exceptions import TdxConnectionError
+from .exceptions import TdxConnectionError, TdxDecodeError
 from .models.bar import SecurityBar
 from .models.enums import KlineCategory, Market
 from .models.finance import (
@@ -319,6 +319,42 @@ class TdxClient:
                     last_exc = e
             raise last_exc  # type: ignore[misc]
 
+    def _switch_host(self, host: str) -> None:
+        """将底层连接切换到指定主机，并持久化为最佳主机。"""
+        self._conn.close()
+        self._host = host
+        self._conn = TdxConnection(host, self._port, self._timeout)
+        self._conn.connect()
+        if self._heartbeat_interval > 0:
+            self._conn.start_heartbeat(self._heartbeat_interval)
+        save_best_host(host)
+
+    def _execute_bars(self, cmd: "BaseCommand[_T]") -> _T:
+        """执行标准协议 K 线命令，自动避开不支持该命令的服务器。
+
+        通达信存在只提供报价、不响应标准协议 K 线的服务器。若当前服务器
+        返回残缺响应导致解码失败，则依次尝试其他候选主机，成功后复用该主机。
+        """
+        try:
+            return self._execute(cmd)
+        except TdxDecodeError:
+            for host in get_known_hosts():
+                if host == self._host:
+                    continue
+                try:
+                    conn = TdxConnection(host, self._port, self._timeout)
+                    conn.connect()
+                    try:
+                        result = conn.execute(cmd)
+                    finally:
+                        conn.close()
+                except Exception:
+                    continue
+                if result:
+                    self._switch_host(host)
+                    return result
+            raise
+
     # ------------------------------------------------------------------ #
     # 市场信息
     # ------------------------------------------------------------------ #
@@ -441,7 +477,7 @@ class TdxClient:
         count: int = 800,
     ) -> pd.DataFrame:
         """获取 K 线数据（最多800条/次，按 start 分页）。"""
-        df = _to_df(self._execute(GetSecurityBarsCmd(market, code, category, start, count)))
+        df = _to_df(self._execute_bars(GetSecurityBarsCmd(market, code, category, start, count)))
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     def get_index_bars(
@@ -453,7 +489,7 @@ class TdxClient:
         count: int = 800,
     ) -> pd.DataFrame:
         """获取指数 K 线数据。"""
-        df = _to_df(self._execute(GetIndexBarsCmd(market, code, category, start, count)))
+        df = _to_df(self._execute_bars(GetIndexBarsCmd(market, code, category, start, count)))
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     # ------------------------------------------------------------------ #
@@ -888,6 +924,38 @@ class AsyncTdxClient:
                         last_exc = e
                 raise last_exc  # type: ignore[misc]
 
+    async def _switch_host(self, host: str) -> None:
+        """将底层连接切换到指定主机，并持久化为最佳主机。"""
+        await self._conn.close()
+        self._host = host
+        self._conn = AsyncTdxConnection(host, self._port, self._timeout)
+        await self._conn.connect()
+        save_best_host(host)
+
+    async def _execute_bars(self, cmd: "BaseCommand[_T]") -> _T:
+        """执行标准协议 K 线命令，自动避开不支持该命令的服务器。
+
+        同步版的 asyncio 对应实现，逻辑与 ``TdxClient._execute_bars`` 一致。
+        """
+        try:
+            return await self._execute(cmd)
+        except TdxDecodeError:
+            for host in get_known_hosts():
+                if host == self._host:
+                    continue
+                conn = AsyncTdxConnection(host, self._port, self._timeout)
+                try:
+                    await conn.connect()
+                    result = await conn.execute(cmd)
+                except Exception:
+                    continue
+                finally:
+                    await conn.close()
+                if result:
+                    await self._switch_host(host)
+                    return result
+            raise
+
     async def get_security_count(self, market: Market) -> int:
         return await self._execute(GetSecurityCountCmd(market))
 
@@ -991,7 +1059,9 @@ class AsyncTdxClient:
         start: int,
         count: int = 800,
     ) -> pd.DataFrame:
-        df = _to_df(await self._execute(GetSecurityBarsCmd(market, code, category, start, count)))
+        df = _to_df(
+            await self._execute_bars(GetSecurityBarsCmd(market, code, category, start, count))
+        )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     async def get_index_bars(
@@ -1002,7 +1072,7 @@ class AsyncTdxClient:
         start: int,
         count: int = 800,
     ) -> pd.DataFrame:
-        df = _to_df(await self._execute(GetIndexBarsCmd(market, code, category, start, count)))
+        df = _to_df(await self._execute_bars(GetIndexBarsCmd(market, code, category, start, count)))
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:

@@ -6,9 +6,24 @@ from .._binary import unpack_from
 from ..codec.datetime_ import get_datetime
 from ..codec.price import get_price
 from ..codec.volume import get_volume
+from ..exceptions import TdxDecodeError
 from ..models.bar import SecurityBar
 from ..models.enums import KlineCategory, Market
 from .base import BaseCommand
+
+
+def _check_record_count(body: bytes, ret_count: int) -> None:
+    """校验响应体是否可能容纳声明的记录数。
+
+    部分通达信服务器（多为纯报价节点）不支持标准协议 K 线，会返回
+    一个 2 字节的残缺响应（例如 ``2003``）而不带任何 K 线记录，导致后续
+    解码时抛出难以理解的 “数据不足” 错误。这里提前给出明确提示。
+    """
+    if ret_count > 0 and len(body) < 2 + ret_count:
+        raise TdxDecodeError(
+            f"标准协议 K 线响应异常：声明 {ret_count} 条记录但响应体仅 {len(body)} 字节，"
+            "当前服务器可能不支持该命令，请更换行情服务器"
+        )
 
 
 class GetSecurityBarsCmd(BaseCommand[list[SecurityBar]]):
@@ -58,6 +73,7 @@ class GetSecurityBarsCmd(BaseCommand[list[SecurityBar]]):
 
     def parse_response(self, body: bytes) -> list[SecurityBar]:
         (ret_count,) = unpack_from("<H", body, 0, "security_bars header")
+        _check_record_count(body, ret_count)
         pos = 2
         bars: list[SecurityBar] = []
         pre_diff_base = 0
@@ -111,6 +127,7 @@ class GetIndexBarsCmd(GetSecurityBarsCmd):
 
     def parse_response(self, body: bytes) -> list[SecurityBar]:
         (ret_count,) = unpack_from("<H", body, 0, "security_bars header")
+        _check_record_count(body, ret_count)
         pos = 2
         bars: list[SecurityBar] = []
         pre_diff_base = 0

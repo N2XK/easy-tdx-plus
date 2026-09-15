@@ -49,7 +49,7 @@ def ping_host(
         if hdr.zipsize > 0:
             _recv_exact_sock(sock, hdr.zipsize)
         return time.monotonic() - t0
-    except OSError:
+    except (OSError, TdxConnectionError):
         return None
     finally:
         try:
@@ -78,7 +78,10 @@ def ping_all(
         futures = {pool.submit(ping_host, h, port, timeout): h for h in hosts}
         for fut in concurrent.futures.as_completed(futures):
             host = futures[fut]
-            latency = fut.result()
+            try:
+                latency = fut.result()
+            except Exception:
+                latency = None
             if latency is not None:
                 results.append((host, latency))
     results.sort(key=lambda t: t[1])

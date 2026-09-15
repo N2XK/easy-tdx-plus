@@ -738,6 +738,19 @@ class TdxClient:
         bars = self._execute(GetHistoryMinuteTimeDataCmd(market, code, date))
         return _add_minute_datetime(_to_df(bars), date)
 
+    def get_recent_minute_time_data(self, market: Market, code: str, days: int = 5) -> pd.DataFrame:
+        """获取最近 N 个交易日的分时数据（逐日拉取 0x0fb4）。
+
+        等价于 eltdx 的 ``minutes.recent``：以每日一次请求覆盖近期窗口，
+        数据与 ``get_history_minute_time_data`` 相同（含完整 datetime）。
+        """
+        daily = self.get_bars(market, code, KlineCategory.DAY, 0, days)
+        if daily.empty:
+            return pd.DataFrame()
+        dates = sorted(int(pd.Timestamp(d).strftime("%Y%m%d")) for d in daily["date"])
+        frames = [self.get_history_minute_time_data(market, code, d) for d in dates]
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
     # ------------------------------------------------------------------ #
     # 逐笔成交
     # ------------------------------------------------------------------ #
@@ -1597,6 +1610,17 @@ class AsyncTdxClient:
     ) -> pd.DataFrame:
         bars = await self._execute(GetHistoryMinuteTimeDataCmd(market, code, date))
         return _add_minute_datetime(_to_df(bars), date)
+
+    async def get_recent_minute_time_data(
+        self, market: Market, code: str, days: int = 5
+    ) -> pd.DataFrame:
+        """获取最近 N 个交易日的分时数据（异步版，逐日拉取 0x0fb4）。"""
+        daily = await self.get_bars(market, code, KlineCategory.DAY, 0, days)
+        if daily.empty:
+            return pd.DataFrame()
+        dates = sorted(int(pd.Timestamp(d).strftime("%Y%m%d")) for d in daily["date"])
+        frames = [await self.get_history_minute_time_data(market, code, d) for d in dates]
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
     async def get_transaction_data(
         self, market: Market, code: str, start: int, count: int = 800

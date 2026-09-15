@@ -427,7 +427,8 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_bars_range(market, code, start_date, end_date, ...)` | 日期区间 K 线（自动分页、升序去重） |
 | `get_k_data(code, start_date, end_date, ...)` | 便捷日 K（自动推断市场，兼容 pytdx） |
 | `get_minute_time_data(market, code)` | 今日分时 |
-| `get_history_minute_time_data(market, code, date)` | 历史分时 |
+| `get_history_minute_time_data(market, code, date)` | 历史某日分时 |
+| `get_recent_minute_time_data(market, code, days=5)` | 最近 N 个交易日分时 |
 | `get_transaction_data(market, code, ...)` | 当日逐笔成交 |
 | `get_history_transaction_data(...)` | 历史逐笔成交 |
 | `get_fund_flow(market, code)` | 当日资金流向 |

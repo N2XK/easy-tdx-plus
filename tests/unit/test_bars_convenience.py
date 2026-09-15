@@ -210,3 +210,30 @@ def test_async_get_bars_range() -> None:
 
     res = asyncio.run(main())
     assert _days(res) == [20260913, 20260914, 20260915]
+
+
+def test_get_recent_minute_time_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = TdxClient(host="127.0.0.1")
+    monkeypatch.setattr(
+        c,
+        "get_bars",
+        lambda *a, **k: pd.DataFrame(
+            {"date": pd.to_datetime(["2026-09-11", "2026-09-14", "2026-09-15"])}
+        ),
+    )
+    calls: list[int] = []
+
+    def fake_hist(market: Market, code: str, date: int) -> pd.DataFrame:
+        calls.append(date)
+        return pd.DataFrame({"datetime": pd.to_datetime([f"{date} 09:30"]), "price": [1.0]})
+
+    monkeypatch.setattr(c, "get_history_minute_time_data", fake_hist)
+    df = c.get_recent_minute_time_data(Market.SH, "600519", days=3)
+    assert calls == [20260911, 20260914, 20260915]  # 升序
+    assert len(df) == 3
+
+
+def test_get_recent_minute_time_data_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = TdxClient(host="127.0.0.1")
+    monkeypatch.setattr(c, "get_bars", lambda *a, **k: pd.DataFrame())
+    assert c.get_recent_minute_time_data(Market.SH, "600519").empty

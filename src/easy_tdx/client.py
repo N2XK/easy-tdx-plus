@@ -72,6 +72,34 @@ def _today_in_shanghai() -> int:
     return int(datetime.now(_SHANGHAI_TZ).strftime("%Y%m%d"))
 
 
+def _looks_like_index(market: Market, code: str) -> bool:
+    """按市场与代码前缀判断是否为指数（用于 K 线自动路由）。"""
+    if market == Market.SH:
+        return code.startswith(("000", "880", "881", "882", "883", "884", "885", "999"))
+    if market == Market.SZ:
+        return code.startswith(("395", "399"))
+    return False
+
+
+def _infer_market(code: str) -> Market:
+    """按代码前缀推断市场（尽力而为，与 pytdx.get_k_data 一致）。
+
+    仅覆盖常见股票/基金代码；指数（如 000001 既是上证指数又是平安银行）
+    请使用显式 market 的接口。
+    """
+    return Market.SH if code[:1] in {"5", "6", "9"} else Market.SZ
+
+
+def _bar_date_column(df: pd.DataFrame) -> str:
+    return "date" if "date" in df.columns else "datetime"
+
+
+def _validate_yyyymmdd(value: int, name: str) -> None:
+    text = str(value)
+    if len(text) != 8 or not text.isdigit():
+        raise ValueError(f"{name} 需为 YYYYMMDD 格式的整数，收到: {value!r}")
+
+
 # 在延迟优选时，最多探测前 N 台主机的标准协议能力，避免选用旧版/纯报价服务器。
 _STD_PROBE_LIMIT = 6
 
@@ -553,6 +581,77 @@ class TdxClient:
             )
         )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
+
+    def get_bars(
+        self,
+        market: Market,
+        code: str,
+        category: KlineCategory,
+        start: int,
+        count: int = 800,
+    ) -> pd.DataFrame:
+        """按市场与代码自动路由股票或指数 K 线。"""
+        if _looks_like_index(market, code):
+            return self.get_index_bars(market, code, category, start, count)
+        return self.get_security_bars(market, code, category, start, count)
+
+    def get_bars_range(
+        self,
+        market: Market,
+        code: str,
+        start_date: int,
+        end_date: int,
+        category: KlineCategory = KlineCategory.DAY,
+        count: int = 800,
+    ) -> pd.DataFrame:
+        """分页获取日期闭区间 [start_date, end_date] 内的 K 线（升序、去重）。
+
+        Args:
+            start_date / end_date: YYYYMMDD 整数。
+            category: K 线周期，默认日线。
+        """
+        _validate_yyyymmdd(start_date, "start_date")
+        _validate_yyyymmdd(end_date, "end_date")
+        if start_date > end_date:
+            raise ValueError("start_date 不能晚于 end_date")
+
+        frames: list[pd.DataFrame] = []
+        page_start = 0
+        empty = pd.DataFrame()
+        for _ in range(256):
+            page = self.get_bars(market, code, category, page_start, count)
+            if page.empty:
+                break
+            col = _bar_date_column(page)
+            days = pd.to_datetime(page[col]).dt.strftime("%Y%m%d").astype(int)
+            mask = (days >= start_date) & (days <= end_date)
+            if mask.any():
+                frames.append(page.loc[mask])
+            if int(days.min()) <= start_date or len(page) < count:
+                break
+            page_start += len(page)
+            empty = page.iloc[0:0]
+
+        if not frames:
+            return empty
+        result = pd.concat(frames, ignore_index=True)
+        col = _bar_date_column(result)
+        result = result.drop_duplicates(subset=[col]).sort_values(col).reset_index(drop=True)
+        return result
+
+    def get_k_data(
+        self,
+        code: str,
+        start_date: int,
+        end_date: int,
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> pd.DataFrame:
+        """便捷获取某代码日期区间内的 K 线（自动推断市场，默认日线）。
+
+        与 pytdx 的 ``get_k_data`` 保持一致：仅按代码前缀推断所属市场
+        （6/5/9 开头为上海，其余为深圳），指数请改用显式 market 的接口。
+        """
+        return self.get_bars_range(_infer_market(code), code, start_date, end_date, category)
 
     # ------------------------------------------------------------------ #
     # 分时
@@ -1174,6 +1273,70 @@ class AsyncTdxClient:
             )
         )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
+
+    async def get_bars(
+        self,
+        market: Market,
+        code: str,
+        category: KlineCategory,
+        start: int,
+        count: int = 800,
+    ) -> pd.DataFrame:
+        """按市场与代码自动路由股票或指数 K 线。"""
+        if _looks_like_index(market, code):
+            return await self.get_index_bars(market, code, category, start, count)
+        return await self.get_security_bars(market, code, category, start, count)
+
+    async def get_bars_range(
+        self,
+        market: Market,
+        code: str,
+        start_date: int,
+        end_date: int,
+        category: KlineCategory = KlineCategory.DAY,
+        count: int = 800,
+    ) -> pd.DataFrame:
+        """分页获取日期闭区间 [start_date, end_date] 内的 K 线（升序、去重）。"""
+        _validate_yyyymmdd(start_date, "start_date")
+        _validate_yyyymmdd(end_date, "end_date")
+        if start_date > end_date:
+            raise ValueError("start_date 不能晚于 end_date")
+
+        frames: list[pd.DataFrame] = []
+        page_start = 0
+        empty = pd.DataFrame()
+        for _ in range(256):
+            page = await self.get_bars(market, code, category, page_start, count)
+            if page.empty:
+                break
+            col = _bar_date_column(page)
+            days = pd.to_datetime(page[col]).dt.strftime("%Y%m%d").astype(int)
+            mask = (days >= start_date) & (days <= end_date)
+            if mask.any():
+                frames.append(page.loc[mask])
+            if int(days.min()) <= start_date or len(page) < count:
+                break
+            page_start += len(page)
+            empty = page.iloc[0:0]
+
+        if not frames:
+            return empty
+        result = pd.concat(frames, ignore_index=True)
+        col = _bar_date_column(result)
+        result = result.drop_duplicates(subset=[col]).sort_values(col).reset_index(drop=True)
+        return result
+
+    async def get_k_data(
+        self,
+        code: str,
+        start_date: int,
+        end_date: int,
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> pd.DataFrame:
+        """便捷获取某代码日期区间内的 K 线（自动推断市场，默认日线）。"""
+        return await self.get_bars_range(
+            _infer_market(code), code, start_date, end_date, category
+        )
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
         today = _today_in_shanghai()

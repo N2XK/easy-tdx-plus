@@ -420,6 +420,9 @@ bars = read_daily_bars(filepath)
 | `get_security_quotes(stocks)` | 批量五档行情 |
 | `get_security_bars(market, code, ...)` | 个股 K 线 |
 | `get_index_bars(market, code, ...)` | 指数 K 线 |
+| `get_bars(market, code, ...)` | K 线（按代码自动路由股票/指数） |
+| `get_bars_range(market, code, start_date, end_date, ...)` | 日期区间 K 线（自动分页、升序去重） |
+| `get_k_data(code, start_date, end_date, ...)` | 便捷日 K（自动推断市场，兼容 pytdx） |
 | `get_minute_time_data(market, code)` | 今日分时 |
 | `get_history_minute_time_data(market, code, date)` | 历史分时 |
 | `get_transaction_data(market, code, ...)` | 当日逐笔成交 |

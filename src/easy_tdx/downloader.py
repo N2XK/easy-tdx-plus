@@ -19,6 +19,7 @@ import pandas as pd
 from .client import TdxClient
 from .models.enums import KlineCategory, Market
 from .parallel import ParallelTdx
+from .validation import check_bars
 
 __all__ = ["Downloader"]
 
@@ -51,6 +52,7 @@ class Downloader:
         client_factory: Callable[[], TdxClient] | None = None,
         end_date: int | None = None,
         rate_limit: bool = False,
+        validate: bool = False,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -59,6 +61,8 @@ class Downloader:
         self._factory = client_factory
         self.end_date = end_date
         self.rate_limit = rate_limit
+        self.validate = validate
+        self.errors: dict[str, list[str]] = {}
         self.manifest_path = self.data_dir / "_manifest.json"
 
     # ------------------------------------------------------------------ #
@@ -122,6 +126,7 @@ class Downloader:
             raise ValueError("fmt='parquet' 需要安装 pyarrow 或 fastparquet；或改用 fmt='csv'")
         manifest = self._load_manifest()
         end = self.end_date or _today()
+        self.errors = {}
 
         def work(client: TdxClient, item: tuple[Market, str]) -> tuple[str, int]:
             market, code = item
@@ -133,6 +138,11 @@ class Downloader:
             df = client.get_bars_range(market, code, begin, end, category)
             if df.empty:
                 return key, 0
+            if self.validate:
+                issues = check_bars(df, key)
+                if issues:
+                    self.errors[key] = issues
+                    return key, 0
             self._append(key, df, fmt)
             max_day = int(pd.to_datetime(df["date"]).dt.strftime("%Y%m%d").max())
             manifest[key] = max_day

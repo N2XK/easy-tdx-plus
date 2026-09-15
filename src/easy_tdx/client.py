@@ -66,7 +66,7 @@ from .models.finance import (
 from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
-from .ratelimit import RateLimiter
+from .ratelimit import AsyncRateLimiter, RateLimiter
 from .transport.async_ import AsyncTdxConnection
 from .transport.sync import TdxConnection, ping_all
 
@@ -118,8 +118,9 @@ def _validate_yyyymmdd(value: int, name: str) -> None:
 
 # 在延迟优选时，最多探测前 N 台主机的标准协议能力，避免选用旧版/纯报价服务器。
 _STD_PROBE_LIMIT = 6
-# 主机标准协议能力探测结果缓存（进程内）。
-_STD_CAPABILITY_CACHE: dict[str, bool] = {}
+# 主机标准协议能力探测结果缓存（进程内，带 TTL）。
+_STD_CAPABILITY_CACHE: dict[str, tuple[float, bool]] = {}
+_STD_CAPABILITY_TTL = 3600.0
 
 
 def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
@@ -131,8 +132,8 @@ def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
     """
     key = f"{host}:{port}"
     cached = _STD_CAPABILITY_CACHE.get(key)
-    if cached is not None:
-        return cached
+    if cached is not None and (time.monotonic() - cached[0]) < _STD_CAPABILITY_TTL:
+        return cached[1]
     try:
         conn = TdxConnection(host, port, timeout)
         conn.connect()
@@ -143,7 +144,7 @@ def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
         result = bool(quotes)
     except Exception:
         result = False
-    _STD_CAPABILITY_CACHE[key] = result
+    _STD_CAPABILITY_CACHE[key] = (time.monotonic(), result)
     return result
 
 
@@ -1212,6 +1213,7 @@ class AsyncTdxClient:
         timeout: float | None = None,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
+        rate_limit: bool = False,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
@@ -1222,6 +1224,18 @@ class AsyncTdxClient:
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._zhb_cache: dict[str, bytes] | None = None
+        self._limiter: AsyncRateLimiter | None = AsyncRateLimiter() if rate_limit else None
+        if self._limiter is not None:
+            self._limiter.auto_detect_phase()
+
+    def set_phase(self, phase: str) -> None:
+        """设置限流时段（仅当启用 ``rate_limit`` 时有效）。"""
+        if self._limiter is not None:
+            self._limiter.set_phase(phase)
+
+    def auto_detect_phase(self) -> str | None:
+        """按当前时间自动检测限流时段。"""
+        return self._limiter.auto_detect_phase() if self._limiter is not None else None
 
     @classmethod
     def from_best_host(
@@ -1320,6 +1334,8 @@ class AsyncTdxClient:
 
     async def _execute(self, cmd: "BaseCommand[_T]") -> _T:
         """执行命令；断线时指数退避重试。"""
+        if self._limiter is not None:
+            await self._limiter.acquire()
         async with self._execute_lock:
             try:
                 return await self._conn.execute(cmd)

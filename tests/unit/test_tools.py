@@ -146,3 +146,19 @@ def test_to_tuples() -> None:
     assert to_tuples([_Rec(1, "x"), _Rec(2, "y")]) == [(1, "x"), (2, "y")]
     assert to_tuples(_Rec(3, "z")) == [(3, "z")]
     assert to_tuples([]) == []
+
+
+def test_async_rate_limiter() -> None:
+    import asyncio
+
+    from easy_tdx import AsyncRateLimiter
+
+    async def main() -> str:
+        limiter = AsyncRateLimiter(rates={"closed": 0.0})
+        for _ in range(3):
+            await limiter.acquire()  # 0 速率 -> 不限流，立即返回
+        limiter.auto_detect_phase()
+        limiter.set_phase("trading")
+        return limiter.phase
+
+    assert asyncio.run(main()) == "trading"

@@ -143,3 +143,27 @@ def test_downloader_parquet_requires_pyarrow(tmp_path: Path) -> None:
     dl = Downloader(tmp_path, connections=1, client_factory=_DownloadFakeClient, end_date=20991231)
     with pytest.raises(ValueError, match="parquet"):
         dl.download_daily([(Market.SH, "600519")], fmt="parquet")
+
+
+class _BadBarsClient(_FakeClient):
+    def get_bars_range(
+        self, market: Market, code: str, begin: int, end: int, category: KlineCategory
+    ) -> pd.DataFrame:
+        df = _bars(begin)
+        df.loc[0, "high"] = -1.0  # 非法：high < open/close/low
+        return df
+
+
+def test_downloader_validate_skips_bad(tmp_path: Path) -> None:
+    dl = Downloader(
+        tmp_path,
+        connections=1,
+        client_factory=_BadBarsClient,
+        end_date=20991231,
+        validate=True,
+    )
+    r = dl.download_daily([(Market.SH, "600519")], start_date=20260101, fmt="csv")
+    assert r["sh600519"] == 0
+    assert "sh600519" in dl.errors
+    assert not (tmp_path / "sh600519.csv").exists()
+    assert dl._load_manifest().get("sh600519") is None

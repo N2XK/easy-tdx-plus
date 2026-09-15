@@ -8,10 +8,13 @@
     limiter = RateLimiter()
     limiter.auto_detect_phase()
     limiter.acquire()   # 阻塞至允许下一次请求
+
+异步场景使用 :class:`AsyncRateLimiter`（``await limiter.acquire()``）。
 """
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections.abc import Callable
@@ -19,7 +22,7 @@ from datetime import datetime
 from datetime import time as dtime
 from zoneinfo import ZoneInfo
 
-__all__ = ["RateLimiter", "detect_phase", "DEFAULT_RATES"]
+__all__ = ["RateLimiter", "AsyncRateLimiter", "detect_phase", "DEFAULT_RATES"]
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -91,4 +94,35 @@ class RateLimiter:
             if now < self._next_at:
                 self._sleep(self._next_at - now)
                 now = self._clock()
+            self._next_at = max(now, self._next_at) + interval
+
+
+class AsyncRateLimiter:
+    """asyncio 版匀速限流器（非阻塞，使用 ``asyncio.sleep``）。"""
+
+    def __init__(self, rates: dict[str, float] | None = None, phase: str = "closed") -> None:
+        self.rates = dict(rates or DEFAULT_RATES)
+        self.phase = phase
+        self._next_at = 0.0
+        self._lock = asyncio.Lock()
+
+    def set_phase(self, phase: str) -> None:
+        if phase not in ("trading", "prepost", "closed"):
+            raise ValueError("phase 必须是 trading / prepost / closed")
+        self.phase = phase
+
+    def auto_detect_phase(self, now: datetime | None = None) -> str:
+        self.phase = detect_phase(now)
+        return self.phase
+
+    async def acquire(self) -> None:
+        rate = self.rates.get(self.phase, 0.0)
+        if rate <= 0:
+            return
+        interval = 1.0 / rate
+        async with self._lock:
+            now = time.monotonic()
+            if now < self._next_at:
+                await asyncio.sleep(self._next_at - now)
+                now = time.monotonic()
             self._next_at = max(now, self._next_at) + interval

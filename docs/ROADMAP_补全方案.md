@@ -118,8 +118,8 @@
 | 基金 API | ✅ | `fund.py`（`classify_fund` / `is_fund`）、`TdxClient.get_fund_list` |
 | 响应语义校验 | ✅ | `validation.py`（`check_bars` / `validate_bars`）+ `TdxValidationError` |
 | 能力探测缓存 | ✅ | `_STD_CAPABILITY_CACHE`（进程内记忆） |
+| 离线解析向量化 | ✅ | `daily_bar` / `min_bar` / `ex_daily_bar` 改用 numpy 结构化解析，新增 `read_*_df` 快速路径（20 万条：旧 311ms → DataFrame 46ms，**≈7×**） |
 | CI | ✅ | `.github/workflows/ci.yml`（pytest 阻断；ruff/mypy 信息性） |
-| 离线解析向量化 | ⏸ 未做 | 需 numpy 结构化解析，收益有限、改动大，暂缓 |
 | Rust 内核 | ❌ 不建议 | 违背纯 Python 定位；性能敏感用户可直接用 `tdxrs`（MIT） |
 
 > 设计原则：保持纯 Python、无额外运行时依赖（numpy/pandas 已是可选），

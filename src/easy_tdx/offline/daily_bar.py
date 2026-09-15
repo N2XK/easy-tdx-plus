@@ -3,6 +3,9 @@
 import struct
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from ..exceptions import TdxFileNotFoundError
 from ..models.bar import SecurityBar
 from .paths import _market_to_exchange, resolve_vipdoc
@@ -10,6 +13,20 @@ from .paths import _market_to_exchange, resolve_vipdoc
 # struct 格式：日期(YYYYMMDD) 开盘 最高 最低 收盘 成交额 成交量 保留
 # 全部为小端序，32 字节/条
 _DAILY_FMT = struct.Struct("<IIIIIfII")
+
+# numpy 结构化 dtype（与 _DAILY_FMT 等价），用于整块向量化解析
+_DAILY_DTYPE = np.dtype(
+    [
+        ("date", "<u4"),
+        ("open", "<u4"),
+        ("high", "<u4"),
+        ("low", "<u4"),
+        ("close", "<u4"),
+        ("amount", "<f4"),
+        ("vol", "<u4"),
+        ("reserved", "<u4"),
+    ]
+)
 
 # 证券类型 → (价格系数, 量系数)
 _SECURITY_COEFFICIENTS: dict[str, tuple[float, float]] = {
@@ -61,6 +78,12 @@ def _detect_security_type(filename: str) -> str:
     return "SZ_A_STOCK"  # 默认按 A 股处理
 
 
+def _decode_daily(data: bytes, price_coeff: float, vol_coeff: float) -> np.ndarray:
+    """将整个 .day 文件向量化解析为结构化数组（仅完整记录）。"""
+    n = len(data) // _DAILY_DTYPE.itemsize
+    return np.frombuffer(data, dtype=_DAILY_DTYPE, count=n)
+
+
 def read_daily_bars(filepath: str | Path) -> list[SecurityBar]:
     """从本地 .day 文件读取日线 K 线数据。
 
@@ -81,34 +104,64 @@ def read_daily_bars(filepath: str | Path) -> list[SecurityBar]:
     if len(data) < _DAILY_FMT.size:
         return []
 
-    results: list[SecurityBar] = []
-    record_size = _DAILY_FMT.size
-    for offset in range(0, len(data) - record_size + 1, record_size):
-        raw = data[offset : offset + record_size]
-        date_int, op, hi, lo, cl, amount, vol, _res = _DAILY_FMT.unpack(raw)
+    arr = _decode_daily(data, price_coeff, vol_coeff)
+    size = _DAILY_DTYPE.itemsize
+    date = arr["date"]
+    year = (date // 10000).astype(int)
+    month = ((date % 10000) // 100).astype(int)
+    day = (date % 100).astype(int)
+    open_ = arr["open"].astype(float) * price_coeff
+    close = arr["close"].astype(float) * price_coeff
+    high = arr["high"].astype(float) * price_coeff
+    low = arr["low"].astype(float) * price_coeff
+    vol = arr["vol"].astype(float) * vol_coeff
+    amount = arr["amount"].astype(float)
 
-        year = date_int // 10000
-        month = (date_int % 10000) // 100
-        day = date_int % 100
-
-        results.append(
-            SecurityBar(
-                open=op * price_coeff,
-                close=cl * price_coeff,
-                high=hi * price_coeff,
-                low=lo * price_coeff,
-                vol=vol * vol_coeff,
-                amount=amount,
-                year=year,
-                month=month,
-                day=day,
-                hour=0,
-                minute=0,
-                _raw=raw,
-            )
+    return [
+        SecurityBar(
+            open=float(open_[i]),
+            close=float(close[i]),
+            high=float(high[i]),
+            low=float(low[i]),
+            vol=float(vol[i]),
+            amount=float(amount[i]),
+            year=int(year[i]),
+            month=int(month[i]),
+            day=int(day[i]),
+            hour=0,
+            minute=0,
+            _raw=data[i * size : (i + 1) * size],
         )
+        for i in range(len(arr))
+    ]
 
-    return results
+
+def read_daily_bars_df(filepath: str | Path) -> pd.DataFrame:
+    """向量化读取 .day 为 DataFrame（跳过逐条 dataclass，最快路径）。
+
+    列：date, open, close, high, low, vol, amount（按时间升序）。
+    """
+    filepath = Path(filepath)
+    if not filepath.is_file():
+        raise TdxFileNotFoundError(f"日线数据文件不存在: {filepath}")
+    sec_type = _detect_security_type(filepath.name)
+    price_coeff, vol_coeff = _SECURITY_COEFFICIENTS.get(sec_type, (0.01, 0.01))
+    data = filepath.read_bytes()
+    if len(data) < _DAILY_FMT.size:
+        return pd.DataFrame(columns=["date", "open", "close", "high", "low", "vol", "amount"])
+    arr = _decode_daily(data, price_coeff, vol_coeff)
+    date = arr["date"]
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(date.astype("U8"), format="%Y%m%d"),
+            "open": arr["open"].astype(float) * price_coeff,
+            "close": arr["close"].astype(float) * price_coeff,
+            "high": arr["high"].astype(float) * price_coeff,
+            "low": arr["low"].astype(float) * price_coeff,
+            "vol": arr["vol"].astype(float) * vol_coeff,
+            "amount": arr["amount"].astype(float),
+        }
+    )
 
 
 def find_daily_bar_file(

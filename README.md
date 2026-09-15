@@ -283,15 +283,18 @@ with TdxClient.from_best_host() as c:
 无需网络，从本地通达信安装目录直接读取：
 
 ```python
-from easy_tdx.offline import detect_tdx_home, read_daily_bars, find_daily_bar_file
+from easy_tdx.offline import detect_tdx_home, read_daily_bars, read_daily_bars_df, find_daily_bar_file
 from easy_tdx import Market
 
 home = detect_tdx_home()
 filepath = find_daily_bar_file(Market.SH, "600000")
-bars = read_daily_bars(filepath)
+bars = read_daily_bars(filepath)          # list[SecurityBar]
+df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向量化，≈7×）
 ```
 
 支持：日线、分钟线、扩展市场日线、板块、股本变迁、历史财务数据。
+解析采用 numpy 结构化数组整块向量化；`read_*_df` 为绕过逐条对象构造的最快路径
+（20 万条日线：旧实现 311ms → DataFrame 46ms）。
 
 ## 枚举参考
 

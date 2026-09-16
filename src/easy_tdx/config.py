@@ -277,6 +277,23 @@ def get_timeout() -> float:
     return cast("float", cfg.get("timeout", _FALLBACK_TIMEOUT))
 
 
+def get_capability_cache() -> dict[str, Any]:
+    """返回持久化的服务器能力缓存 ``{host:port: {"ts":..., "caps": {...}}}``。"""
+    value = _load().get("capabilities", {})
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else {}
+
+
+def save_capability(key: str, caps: dict[str, bool]) -> None:
+    """把某服务器的能力探测结果持久化到 config.json（供后续启动直接选路）。"""
+    cfg = _load()
+    table = cfg.setdefault("capabilities", {})
+    if not isinstance(table, dict):
+        table = {}
+        cfg["capabilities"] = table
+    table[key] = {"ts": datetime.now().isoformat(), "caps": caps}
+    _save(cfg)
+
+
 def get_retry_delays() -> tuple[float, ...]:
     """返回断线重试的退避序列（秒）。
 

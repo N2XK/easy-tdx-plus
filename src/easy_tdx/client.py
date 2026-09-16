@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
@@ -21,6 +21,7 @@ from ._df import (
     _merge_txn_datetime,
     _to_df,
 )
+from .capabilities import probe_capabilities, select_host
 from .codec.block import parse_block_dat
 from .codec.configdata import (
     fill_block_index_with_alias,
@@ -400,6 +401,28 @@ class TdxClient:
         self._zhb_cache = None
         _STD_CAPABILITY_CACHE.clear()
 
+    @staticmethod
+    def probe_capabilities(
+        host: str, port: int | None = None, timeout: float | None = None, *, refresh: bool = False
+    ) -> dict[str, bool]:
+        """探测指定服务器的分项能力 ``{feature: bool}``。
+
+        能力项见 :data:`easy_tdx.capabilities.FEATURES`（quotes/kline/transaction/
+        finance/xdxr/security_list）。结果缓存 1 小时并持久化到 config.json。
+        """
+        return probe_capabilities(
+            host,
+            port if port is not None else get_port(),
+            timeout if timeout is not None else get_timeout(),
+            refresh=refresh,
+        )
+
+    def get_capabilities(
+        self, host: str | None = None, *, refresh: bool = False
+    ) -> dict[str, bool]:
+        """探测并返回某主机（默认当前主机）的分项能力。"""
+        return probe_capabilities(host or self._host, self._port, self._timeout, refresh=refresh)
+
     def _rate_acquire(self) -> None:
         if self._limiter is not None:
             self._limiter.acquire()
@@ -431,11 +454,17 @@ class TdxClient:
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
+        require: Iterable[str] | None = None,
     ) -> "TdxClient":
         """测量 hosts 中所有服务器延迟，选最低延迟且支持标准协议的建立连接。
 
         自动将最佳主机保存到 config.json，后续连接默认使用该主机。
         若所有服务器均不可达，回退到 hosts[0]。
+
+        Args:
+            require: 需要的能力列表（见 `easy_tdx.capabilities.FEATURES`，如
+                ``["kline","transaction","finance"]``）。给定后会在最低延迟的若干台
+                主机中，选第一台**支持全部所需能力**的，避免调用时才回退。
         """
         if hosts is None:
             hosts = get_known_hosts()
@@ -444,12 +473,16 @@ class TdxClient:
         if timeout is None:
             timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
-        best = ranked[0][0] if ranked else hosts[0]
-        # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
-        for host, _latency in ranked[:_STD_PROBE_LIMIT]:
-            if _probe_standard_capability(host, port, timeout):
-                best = host
-                break
+        required_host = select_host(ranked, require, port, timeout, limit=_STD_PROBE_LIMIT)
+        if required_host is not None:
+            best = required_host
+        else:
+            best = ranked[0][0] if ranked else hosts[0]
+            # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
+            for host, _latency in ranked[:_STD_PROBE_LIMIT]:
+                if _probe_standard_capability(host, port, timeout):
+                    best = host
+                    break
         save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
@@ -1706,6 +1739,14 @@ class AsyncTdxClient:
         self._zhb_cache = None
         _STD_CAPABILITY_CACHE.clear()
 
+    async def get_capabilities(
+        self, host: str | None = None, *, refresh: bool = False
+    ) -> dict[str, bool]:
+        """探测并返回某主机（默认当前主机）的分项能力。"""
+        return await asyncio.to_thread(
+            probe_capabilities, host or self._host, self._port, self._timeout, refresh=refresh
+        )
+
     @classmethod
     def from_best_host(
         cls,
@@ -1715,10 +1756,11 @@ class AsyncTdxClient:
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
+        require: Iterable[str] | None = None,
     ) -> "AsyncTdxClient":
         """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。
 
-        自动将最佳主机保存到 config.json。
+        自动将最佳主机保存到 config.json。`require` 见 `TdxClient.from_best_host`。
         """
         if hosts is None:
             hosts = get_known_hosts()
@@ -1727,12 +1769,16 @@ class AsyncTdxClient:
         if timeout is None:
             timeout = get_timeout()
         ranked = ping_all(hosts, port, ping_timeout)
-        best = ranked[0][0] if ranked else hosts[0]
-        # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
-        for host, _latency in ranked[:_STD_PROBE_LIMIT]:
-            if _probe_standard_capability(host, port, timeout):
-                best = host
-                break
+        required_host = select_host(ranked, require, port, timeout, limit=_STD_PROBE_LIMIT)
+        if required_host is not None:
+            best = required_host
+        else:
+            best = ranked[0][0] if ranked else hosts[0]
+            # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
+            for host, _latency in ranked[:_STD_PROBE_LIMIT]:
+                if _probe_standard_capability(host, port, timeout):
+                    best = host
+                    break
         save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 

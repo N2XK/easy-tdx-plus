@@ -120,6 +120,9 @@
 
 ### CI / Tests
 
+- 深度排查补充：本地 `.day`/扩展 `.day`/复权因子/`0x124A`/MAC 文件/扩展逐笔与K线等 9 项修复；
+  离线单测 390、全接口实测 146/146、联网集成 13、sync/async 12 组逐位对等。
+
 - CI：py3.10/3.12/3.13；`mypy`/`ruff` 阻断；覆盖率 `fail_under=50`。
 - 单元测试覆盖协议编解码、离线解析、公式、CLI（mock）等；集成测试（`XMTDX_LIVE=1`）。
 - 新增扩展行情命令离线单测（`tests/unit/test_ex_commands_offline.py`）与 MAC 命令/离线路径单测

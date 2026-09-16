@@ -19,6 +19,9 @@
   `valuation_history`（估值历史 PE/PB×1Y/3Y/5Y）、`hot_topic_overview`（题材信息面）、
   `balance_sheet`/`income_statement`/`cashflow_statement`（三表）、`business_composition`（主营构成）、
   `industry_rank`（行业排名）、`institutional_holding_detail`/`institutional_holding_price_compare`（机构持仓），均实测可用。
+  另封装：`research_consensus`（研报一致预期）、`theme_boards`（题材板块族）、`company_events`（公司大事）、
+  `company_basic`（公司基本资料）、`institutional_holding_dates`、`industry_chain`（产业链）、
+  `industry_valuation`（行业估值对比）、`dragon_tiger_list`（龙虎榜）、`dividend_overview`/`dividend_viewer`（分红）。
 - **F10 / ICFQS（7615 TQLEX）**：公司概况/财报/题材/公告/北向/估值/涨跌停榜；龙虎榜/游资/每日复盘/题材（含异步）；**十大股东 / 机构持股 / 流通股东趋势 / 股东人数 / 股东人数排名**。
 - **扩展命令**：`0x0452`(特殊涨跌停表)、`0x051a`(成交分布)、`0x051b`(分时副图)、`0x051c`(指数动量)、
   `0x051d`(指数概况)、`0x053f`(排行榜)、`0x0547`(加密行情)、`0x0fd1`(小走势图)。

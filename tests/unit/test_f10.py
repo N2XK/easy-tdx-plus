@@ -193,6 +193,43 @@ def test_alt_f10_financials_params() -> None:
     assert fake.calls[-1][1]["Params"] == ["00101", "000001", "0"]
 
 
+def test_alt_f10_extra_entries_params() -> None:
+    from easy_tdx.f10 import AltF10Client
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    c = AltF10Client(transport=fake, empty_retries=0)
+
+    c.research_consensus("000001")
+    assert fake.calls[-1][1]["Params"] == ["000001", "yzyq"]
+
+    c.theme_boards("000001")
+    assert fake.calls[-1][1]["Params"] == ["000001", "zttzbkz"]
+
+    c.company_events("000001")
+    assert fake.calls[-1][1]["Params"] == ["000001", "gsgy", ""]
+
+    c.company_basic("000001")
+    assert fake.calls[-1][1]["Params"] == ["0", "000001", ""]
+
+    c.institutional_holding_dates("000001")
+    assert fake.calls[-1][1]["Params"] == ["jgcg", "000001"]
+
+    c.industry_chain(881426)
+    assert fake.calls[-1][1]["Params"] == ["881426"]
+
+    c.industry_valuation(881430, "301073")
+    assert fake.calls[-1][1]["Params"] == ["01", "881430", "301073"]
+
+    c.dragon_tiger_list("000001", "20221129")
+    assert fake.calls[-1][1]["Params"] == ["000001", "jglhb", "20221129"]
+
+    c.dividend_overview("000001")
+    assert fake.calls[-1][1]["Params"] == ["000001", "pxmz"]
+
+    c.dividend_viewer("000001")
+    assert fake.calls[-1][1]["Params"] == ["qhgp", "000001", "0", ""]
+
+
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)

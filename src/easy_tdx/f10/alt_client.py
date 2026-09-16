@@ -19,12 +19,22 @@ from .entries import (
     ENTRY_ALT_BALANCE_SHEET,
     ENTRY_ALT_BUSINESS_COMPOSITION,
     ENTRY_ALT_CASHFLOW_STATEMENT,
+    ENTRY_ALT_COMPANY_BASIC,
+    ENTRY_ALT_COMPANY_EVENTS,
+    ENTRY_ALT_DIVIDEND_OVERVIEW,
+    ENTRY_ALT_DIVIDEND_VIEWER,
+    ENTRY_ALT_DRAGON_TIGER,
     ENTRY_ALT_HOT_TOPIC_OVERVIEW,
     ENTRY_ALT_INCOME_STATEMENT,
+    ENTRY_ALT_INDUSTRY_CHAIN,
     ENTRY_ALT_INDUSTRY_RANK,
+    ENTRY_ALT_INDUSTRY_VALUATION,
+    ENTRY_ALT_INSTITUTIONAL_DATES,
     ENTRY_ALT_INSTITUTIONAL_DETAIL,
     ENTRY_ALT_INSTITUTIONAL_PRICE,
+    ENTRY_ALT_RESEARCH_CONSENSUS,
     ENTRY_ALT_SHARE_CAPITAL,
+    ENTRY_ALT_THEME_BOARDS,
     ENTRY_ALT_VALUATION_HISTORY,
 )
 from .models import F10Response
@@ -133,3 +143,47 @@ class AltF10Client(F10Client):
     ) -> F10Response:
         """机构持仓与股价对比（``ph_agf10_gbgd_jgcc``）。"""
         return self.params(ENTRY_ALT_INSTITUTIONAL_PRICE, query_key, _code6(code), "0")
+
+    def research_consensus(self, code: str, *, tag: str = "yzyq") -> F10Response:
+        """盈利预测/研报一致预期（``ybpj``，tag=yzyq）。"""
+        return self.params(ENTRY_ALT_RESEARCH_CONSENSUS, _code6(code), tag)
+
+    def theme_boards(self, code: str, *, tag: str = "zttzbkz") -> F10Response:
+        """题材板块族（``rdtc``，tag=zttzbkz）。"""
+        return self.params(ENTRY_ALT_THEME_BOARDS, _code6(code), tag)
+
+    def company_events(self, code: str, *, tag: str = "gsgy") -> F10Response:
+        """公司概况/大事（``zxts``，tag=gsgy）；数据在 ``tables``（多张）。"""
+        return self.params(ENTRY_ALT_COMPANY_EVENTS, _code6(code), tag, "")
+
+    def company_basic(self, code: str, *, tag: str = "0") -> F10Response:
+        """公司基本资料（``gsgk``，tag=0）。"""
+        return self.params(ENTRY_ALT_COMPANY_BASIC, tag, _code6(code), "")
+
+    def institutional_holding_dates(self, code: str, *, tag: str = "jgcg") -> F10Response:
+        """机构持股可用报告期（``comreq``，tag=jgcg）。"""
+        return self.params(ENTRY_ALT_INSTITUTIONAL_DATES, tag, _code6(code))
+
+    def industry_chain(self, industry_code: str) -> F10Response:
+        """行业产业链（``cfg_tk_gethy``，入参为行业指数代码，如 881426）。"""
+        return self.params(ENTRY_ALT_INDUSTRY_CHAIN, str(industry_code))
+
+    def industry_valuation(
+        self, industry_code: str, stock_code: str, *, query_type: str = "01"
+    ) -> F10Response:
+        """行业估值对比（``skef10_hy_hydw_gzsppm``）。"""
+        return self.params(
+            ENTRY_ALT_INDUSTRY_VALUATION, query_type, str(industry_code), _code6(stock_code)
+        )
+
+    def dragon_tiger_list(self, code: str, date: str = "", *, tag: str = "jglhb") -> F10Response:
+        """龙虎榜（``jyds``，tag=jglhb，date=YYYYMMDD）。"""
+        return self.params(ENTRY_ALT_DRAGON_TIGER, _code6(code), tag, date)
+
+    def dividend_overview(self, code: str, *, tag: str = "pxmz") -> F10Response:
+        """分红融资概览（``fhrz``，tag=pxmz）。"""
+        return self.params(ENTRY_ALT_DIVIDEND_OVERVIEW, _code6(code), tag)
+
+    def dividend_viewer(self, code: str, *, tag: str = "qhgp") -> F10Response:
+        """分红查看筛选（``sj``，tag=qhgp，返回 32 行）。"""
+        return self.params(ENTRY_ALT_DIVIDEND_VIEWER, tag, _code6(code), "0", "")

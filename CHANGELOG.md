@@ -99,6 +99,9 @@
 - 新增扩展行情命令离线单测（`tests/unit/test_ex_commands_offline.py`）与 MAC 命令/离线路径单测
   （`tests/unit/test_mac_commands_offline.py`）、CLI 连接工厂测试，覆盖率 ~64%。
 - 全接口实测脚本 `scripts/verify_all.py`（逐项调用各通道公开 API，汇总 OK/EMPTY/FAIL；实测 **144/144 通过**）。
+- 新增**联网数据下载集成测试**（`tests/integration/test_live_download.py`，`XMTDX_LIVE=1` 启用）：
+  `Downloader` 增量下载/覆盖度校验/缺口补拉，以及官方站点 `fetch_manifest` + `download_channel`
+  直连下载与完整性校验。
 
 ### Known limitations
 

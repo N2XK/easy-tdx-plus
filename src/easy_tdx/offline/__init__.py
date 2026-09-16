@@ -6,7 +6,17 @@ from .ex_daily_bar import ExDailyBar, read_ex_daily_bars, read_ex_daily_bars_df
 from .finders import find_5min_bar_file, find_lc1_bar_file, find_lc5_bar_file
 from .gbbq import GbbqRecord, read_gbbq
 from .history_financial import read_history_financial
+from .htc import HtcEntry, HtcHeader, iter_htc, read_htc
 from .min_bar import read_5min_bars, read_5min_bars_df, read_lc_min_bars, read_lc_min_bars_df
+from .official import (
+    DEFAULT_OFFICIAL_BASE,
+    OfficialChannel,
+    download_by_type,
+    download_channel,
+    download_named,
+    fetch_manifest,
+    parse_downit_cfg,
+)
 from .paths import detect_tdx_home, resolve_vipdoc
 
 __all__ = [
@@ -38,4 +48,17 @@ __all__ = [
     "read_gbbq",
     # 历史财务
     "read_history_financial",
+    # 官方下载（tdx.com.cn）
+    "OfficialChannel",
+    "parse_downit_cfg",
+    "fetch_manifest",
+    "download_channel",
+    "download_by_type",
+    "download_named",
+    "DEFAULT_OFFICIAL_BASE",
+    # 官方分笔容器 .htc
+    "HtcEntry",
+    "HtcHeader",
+    "iter_htc",
+    "read_htc",
 ]

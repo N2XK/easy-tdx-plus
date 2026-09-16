@@ -68,6 +68,9 @@
 
 ### Fixed
 
+- **MAC 分类/板块列表分页顺序 & 越界返回**：`get_stock_quotes_list`/`get_board_members` 跨页时用
+  `batch + all` **前插**导致 `count>80` 时页序颠倒（实测第 80/160 条处涨幅回升），且返回条数越界
+  （请求 200 得 240）。现改为顺序追加并裁剪到精确 `count`（sync/async 同修）。
 - **并发竞态（稳定性）**：`TdxConnection`/`ExTdxConnection.close()` 未持锁就置空 `_sock`，与 `execute()`
   竞争会产生 `AttributeError: 'NoneType' object has no attribute 'sendall'`。现 connect/close 加锁、
   execute 使用本地 socket 引用；各 sync 客户端（TdxClient/MacClient/ExTdxClient/MacExClient）重连改为

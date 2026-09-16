@@ -337,3 +337,29 @@ def test_category_code_flags_semantics() -> None:
     items = KlineOffsetCmd(0, 128000).parse_response(body)
     assert [i.is_instrument for i in items] == [False, True, True]
     assert [i.is_connect for i in items] == [False, False, True]
+
+
+def test_quotes_list_pagination_order_and_trim(monkeypatch) -> None:
+    """分类列表分页：跨页保持排序、按 count 精确裁剪（旧实现前插+越界返回）。"""
+    from easy_tdx.mac.client import MacClient
+    from easy_tdx.mac.enums import Category, SortType
+    from easy_tdx.mac.models import MacQuoteField
+
+    # 模拟服务器分页：按分数递减，每页 80 条
+    all_rows = [
+        MacQuoteField(market=1, code=f"{600000 + i}", name="x", fields={"score": 1000 - i})
+        for i in range(240)
+    ]
+
+    def fake_execute(self, cmd):  # noqa: ANN001
+        start = getattr(cmd, "_start", 0)
+        size = getattr(cmd, "_page_size", 80)
+        return all_rows[start : start + size]
+
+    monkeypatch.setattr(MacClient, "_execute", fake_execute)
+    c = MacClient("127.0.0.1")
+
+    df = c.get_stock_quotes_list(Category.SH, 0, 200, sort_type=SortType.CHANGE_PCT)
+    assert len(df) == 200
+    scores = df["score"].tolist()
+    assert scores == sorted(scores, reverse=True)  # 跨页仍降序

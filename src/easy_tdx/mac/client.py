@@ -338,13 +338,14 @@ class MacClient:
             )
             if not batch:
                 break
-            all_quotes = batch + all_quotes
+            all_quotes.extend(batch)
             fetched += len(batch)
             offset += len(batch)
             if len(batch) < page_size:
                 break
 
-        return _quotes_to_df(all_quotes)
+        # 精确裁剪到请求条数（避免最后一页越界返回）
+        return _quotes_to_df(all_quotes[:count])
 
     # ------------------------------------------------------------------ #
     # K 线（支持复权）
@@ -592,13 +593,14 @@ class MacClient:
             )
             if not batch:
                 break
-            all_quotes = batch + all_quotes
+            all_quotes.extend(batch)
             fetched += len(batch)
             offset += len(batch)
             if len(batch) < page_size:
                 break
 
-        return _quotes_to_df(all_quotes)
+        # 精确裁剪到请求条数（避免最后一页越界返回）
+        return _quotes_to_df(all_quotes[:count])
 
     def get_belong_board(self, market: int, code: str) -> pd.DataFrame:
         """获取个股所属板块列表。
@@ -1018,13 +1020,14 @@ class AsyncMacClient:
             )
             if not batch:
                 break
-            all_quotes = batch + all_quotes
+            all_quotes.extend(batch)
             fetched += len(batch)
             offset += len(batch)
             if len(batch) < page_size:
                 break
 
-        return _quotes_to_df(all_quotes)
+        # 精确裁剪到请求条数（避免最后一页越界返回）
+        return _quotes_to_df(all_quotes[:count])
 
     # ------------------------------------------------------------------ #
     # K 线
@@ -1207,13 +1210,14 @@ class AsyncMacClient:
             )
             if not batch:
                 break
-            all_quotes = batch + all_quotes
+            all_quotes.extend(batch)
             fetched += len(batch)
             offset += len(batch)
             if len(batch) < page_size:
                 break
 
-        return _quotes_to_df(all_quotes)
+        # 精确裁剪到请求条数（避免最后一页越界返回）
+        return _quotes_to_df(all_quotes[:count])
 
     async def get_belong_board(self, market: int, code: str) -> pd.DataFrame:
         items = await self._execute(SymbolBelongBoardCmd(market, code))

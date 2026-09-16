@@ -178,6 +178,7 @@ _STD_PROBE_LIMIT = 6
 # 主机标准协议能力探测结果缓存（进程内，带 TTL）。
 _STD_CAPABILITY_CACHE: dict[str, tuple[float, bool]] = {}
 _STD_CAPABILITY_TTL = 3600.0
+_CALENDAR_TTL = 3600.0
 
 
 def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
@@ -356,6 +357,9 @@ class TdxClient:
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
         self._icfqs: IcfqsClient | None = None
+        self._calendar_cache: dict[
+            tuple[Market, str, KlineCategory, int, int], tuple[float, TradingCalendar]
+        ] = {}
         self._limiter: RateLimiter | None = RateLimiter() if rate_limit else None
         if self._limiter is not None:
             self._limiter.auto_detect_phase()
@@ -825,8 +829,14 @@ class TdxClient:
         """
         if end_date is None:
             end_date = _today_in_shanghai()
+        key = (market, code, category, start_date, end_date)
+        cached = self._calendar_cache.get(key)
+        if cached is not None and time.monotonic() - cached[0] < _CALENDAR_TTL:
+            return cached[1]
         bars = self.get_bars_range(market, code, start_date, end_date, category)
-        return TradingCalendar.from_bars(bars)
+        calendar = TradingCalendar.from_bars(bars)
+        self._calendar_cache[key] = (time.monotonic(), calendar)
+        return calendar
 
     def get_trading_days(
         self,
@@ -1457,6 +1467,9 @@ class AsyncTdxClient:
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._zhb_cache: dict[str, bytes] | None = None
+        self._calendar_cache: dict[
+            tuple[Market, str, KlineCategory, int, int], tuple[float, TradingCalendar]
+        ] = {}
         self._limiter: AsyncRateLimiter | None = AsyncRateLimiter() if rate_limit else None
         if self._limiter is not None:
             self._limiter.auto_detect_phase()
@@ -1860,8 +1873,14 @@ class AsyncTdxClient:
         """由指数日线构建交易日历（默认上证指数）。"""
         if end_date is None:
             end_date = _today_in_shanghai()
+        key = (market, code, category, start_date, end_date)
+        cached = self._calendar_cache.get(key)
+        if cached is not None and time.monotonic() - cached[0] < _CALENDAR_TTL:
+            return cached[1]
         bars = await self.get_bars_range(market, code, start_date, end_date, category)
-        return TradingCalendar.from_bars(bars)
+        calendar = TradingCalendar.from_bars(bars)
+        self._calendar_cache[key] = (time.monotonic(), calendar)
+        return calendar
 
     async def get_trading_days(
         self,

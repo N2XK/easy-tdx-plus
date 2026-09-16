@@ -92,3 +92,28 @@ def test_invalid_inputs() -> None:
         cal.is_trading_day(object())
     with pytest.raises(ValueError):
         TradingCalendar.from_bars(pd.DataFrame({"close": [1.0]}))
+
+
+def test_client_calendar_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    from easy_tdx import KlineCategory, Market, TdxClient
+
+    c = TdxClient(host="127.0.0.1")
+    calls: list[tuple[int, int]] = []
+
+    def fake(
+        market: Market,
+        code: str,
+        start: int,
+        end: int,
+        category: KlineCategory = KlineCategory.DAY,
+        count: int = 800,
+    ) -> pd.DataFrame:
+        calls.append((start, end))
+        return pd.DataFrame({"date": pd.to_datetime(["2024-01-02", "2024-01-03"])})
+
+    monkeypatch.setattr(c, "get_bars_range", fake)
+    cal1 = c.get_trading_calendar(20240101, 20240131)
+    cal2 = c.get_trading_calendar(20240101, 20240131)
+    assert len(calls) == 1  # 第二次命中缓存，不再请求
+    assert cal1.days == cal2.days
+    assert c.get_trading_days(20240101, 20240131) == cal1.days

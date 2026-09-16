@@ -36,6 +36,19 @@ class MinuteAuxPoint:
 
 
 @dataclass
+class SparklineSeries:
+    """小走势图序列（0x0fd1）。"""
+
+    market: int
+    code: str
+    selector: int
+    max_count: int
+    base_price: float
+    prices: list[float] = field(default_factory=list)
+    _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
 class TransactionRecord:
     """逐笔成交记录
 

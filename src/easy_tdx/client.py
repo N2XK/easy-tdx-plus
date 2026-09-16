@@ -48,6 +48,7 @@ from .commands.security_bars import GetIndexBarsCmd, GetSecurityBarsCmd
 from .commands.security_count import GetSecurityCountCmd
 from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
+from .commands.sparkline import GetSparklineCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
 from .config import (
@@ -779,6 +780,20 @@ class TdxClient:
             for p in points
         ]
         return _add_minute_aux_time(pd.DataFrame(rows))
+
+    def get_sparkline(
+        self, market: Market, code: str, selector: int = 1, window: int = 20
+    ) -> pd.DataFrame:
+        """小走势图（0x0fd1）：轻量价格序列。
+
+        返回含 ``price`` 列的 DataFrame，``base_price`` 存于 ``df.attrs``。
+        """
+        series = self._execute_std(
+            GetSparklineCmd(market, code, selector, window), require_nonempty=True
+        )
+        df = pd.DataFrame({"price": series.prices})
+        df.attrs["base_price"] = series.base_price
+        return df
 
     # ------------------------------------------------------------------ #
     # 逐笔成交
@@ -1669,6 +1684,17 @@ class AsyncTdxClient:
             for p in points
         ]
         return _add_minute_aux_time(pd.DataFrame(rows))
+
+    async def get_sparkline(
+        self, market: Market, code: str, selector: int = 1, window: int = 20
+    ) -> pd.DataFrame:
+        """小走势图（0x0fd1）异步版。"""
+        series = await self._execute_std(
+            GetSparklineCmd(market, code, selector, window), require_nonempty=True
+        )
+        df = pd.DataFrame({"price": series.prices})
+        df.attrs["base_price"] = series.base_price
+        return df
 
     async def get_transaction_data(
         self, market: Market, code: str, start: int, count: int = 800

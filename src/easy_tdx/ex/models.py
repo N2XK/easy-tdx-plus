@@ -125,12 +125,15 @@ class ExMinuteBar:
 
 @dataclass
 class ExTransactionRecord:
-    """逐笔成交记录（GetTransactionData / GetHistoryTransactionData 返回）。"""
+    """逐笔成交记录（GetTransactionData / GetHistoryTransactionData 返回）。
+
+    ``price`` 已按协议整数 /1000 换算为真实价格（与 quote/minute/bars 一致）。
+    """
 
     hour: int
     minute: int
     second: int
-    price: int
+    price: float
     volume: int
     zengcang: int
     nature: int

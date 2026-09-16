@@ -48,11 +48,10 @@ class GetExInstrumentBarsCmd(BaseCommand[list[ExInstrumentBar]]):
             year, month, day, hour, minute, pos = get_datetime(self.category, body, pos)
             if pos + 28 > len(body):
                 break
-            (open_p, high, low, close_p, position, trade, _price) = struct.unpack(
+            (open_p, high, low, close_p, position, trade, amount) = struct.unpack(
                 "<ffffIIf",
                 body[pos : pos + 28],
             )
-            (amount,) = struct.unpack("<f", body[pos + 16 : pos + 20])
             pos += 28
             results.append(
                 ExInstrumentBar(

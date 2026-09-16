@@ -1,4 +1,7 @@
-"""获取扩展行情成交数据（当日 + 历史）。"""
+"""获取扩展行情成交数据（当日 + 历史）。
+
+价格字段为整数，需除以 1000 才是真实价格（实测港股/美股/期货一致，
+与同市场 quote/minute/bars 的口径对齐）。"""
 
 import struct
 
@@ -50,7 +53,7 @@ class GetExTransactionDataCmd(BaseCommand[list[ExTransactionRecord]]):
                     hour=hour,
                     minute=minute,
                     second=second,
-                    price=price,
+                    price=price / 1000.0,
                     volume=volume,
                     zengcang=zengcang,
                     nature=nature,

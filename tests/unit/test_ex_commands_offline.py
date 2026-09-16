@@ -166,7 +166,7 @@ def test_ex_transaction_parse() -> None:
     assert len(out) == 1
     r = out[0]
     assert (r.hour, r.minute, r.second) == (9, 30, 1)
-    assert r.price == 9999 and r.volume == 100 and r.zengcang == 5 and r.nature == 2
+    assert r.price == 9.999 and r.volume == 100 and r.zengcang == 5 and r.nature == 2
 
 
 def test_ex_minute_time_parse() -> None:
@@ -223,3 +223,36 @@ def test_ex_build_requests_are_bytes() -> None:
     assert GetExMarketsCmd().build_request()
     assert GetExInstrumentCountCmd().build_request()
     assert len(GetExInstrumentInfoCmd(start=2000, count=50).build_request()) == 12 + 6
+
+
+def test_instrument_bars_amount_is_seventh_field() -> None:
+    """0x 扩展K线：amount 必须取记录第 7 个字段，不能是 position 的字节重解释。"""
+    import struct
+
+    from easy_tdx.ex.commands.get_instrument_bars import GetExInstrumentBarsCmd
+
+    dt = struct.pack("<HH", (2026 - 2004) << 11 | 916, 14 * 60 + 15)
+    rec = struct.pack("<ffffIIf", 10.0, 11.0, 9.5, 10.5, 8430, 515, 12.5)
+    body = b"\x00" * 18 + struct.pack("<H", 1) + dt + rec
+    bars = GetExInstrumentBarsCmd(3, 28, "AP2610").parse_response(body)
+    assert len(bars) == 1
+    b = bars[0]
+    assert (b.open, b.high, b.low, b.close) == (10.0, 11.0, 9.5, 10.5)
+    assert b.position == 8430 and b.trade == 515
+    assert b.amount == 12.5  # 修复前是 1.18e-41（position 的浮点重解释）
+
+
+def test_ex_transaction_price_scaled() -> None:
+    """扩展逐笔价格必须 /1000（实测港股/美股/期货一致）。"""
+    import struct
+
+    from easy_tdx.ex.commands.get_transaction import GetExTransactionDataCmd
+
+    # 头 16 字节 + 1 条 16 字节记录
+    head = struct.pack("<B9s4sH", 31, b"00700", b"\x00" * 4, 1)
+    rec = struct.pack("<HIIiH", 15 * 60 + 59, 433400, 200, 0, 0)
+    body = head + rec
+    items = GetExTransactionDataCmd(31, "00700").parse_response(body)
+    assert len(items) == 1
+    assert items[0].price == 433.4
+    assert items[0].volume == 200

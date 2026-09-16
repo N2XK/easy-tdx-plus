@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import threading
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import asdict
@@ -462,6 +463,7 @@ class TdxClient:
         self._heartbeat_interval = heartbeat_interval
         self._retry_delays = retry_delays if retry_delays is not None else get_retry_delays()
         self._conn = TdxConnection(host, port, timeout)
+        self._reconnect_lock = threading.Lock()
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
         self._icfqs: IcfqsClient | None = None
@@ -640,19 +642,25 @@ class TdxClient:
         except TdxConnectionError as first_exc:
             if not self._auto_reconnect:
                 raise
-            last_exc: TdxConnectionError = first_exc
-            for delay in self._retry_delays:
-                time.sleep(delay)
-                self._conn.close()
-                self._conn = TdxConnection(self._host, self._port, self._timeout)
-                self._conn.connect()
-                if self._heartbeat_interval > 0:
-                    self._conn.start_heartbeat(self._heartbeat_interval)
+            with self._reconnect_lock:
+                # 双重检查：其他线程可能已重连成功
                 try:
                     return self._conn.execute(cmd)
-                except TdxConnectionError as e:
-                    last_exc = e
-            raise last_exc
+                except TdxConnectionError:
+                    pass
+                last_exc: TdxConnectionError = first_exc
+                for delay in self._retry_delays:
+                    time.sleep(delay)
+                    self._conn.close()
+                    self._conn = TdxConnection(self._host, self._port, self._timeout)
+                    self._conn.connect()
+                    if self._heartbeat_interval > 0:
+                        self._conn.start_heartbeat(self._heartbeat_interval)
+                    try:
+                        return self._conn.execute(cmd)
+                    except TdxConnectionError as e:
+                        last_exc = e
+                raise last_exc
 
     def _switch_host(self, host: str) -> None:
         """将底层连接切换到指定主机，并持久化为最佳主机。"""
@@ -1472,7 +1480,10 @@ class TdxClient:
         """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        # qfq 以最新一根为基准、与窗口无关（已对照服务端验证），按需窗口取数即可；
+        # hfq 以最早交易日为基准，必须取全量历史，否则数值会随 start_date 漂移。
+        fetch_start = 19900101 if mode == "hfq" else start_date
+        bars, events = self._daily_bars_with_xdxr(market, code, fetch_start, end_date)
         out = adjust_bars(bars, events, mode=mode)
         if start_date > 19900101 and "date" in out.columns:
             keep = pd.to_datetime(out["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date
@@ -2299,7 +2310,8 @@ class AsyncTdxClient:
         """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = await self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        fetch_start = 19900101 if mode == "hfq" else start_date
+        bars, events = await self._daily_bars_with_xdxr(market, code, fetch_start, end_date)
         out = adjust_bars(bars, events, mode=mode)
         if start_date > 19900101 and "date" in out.columns:
             keep = pd.to_datetime(out["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date

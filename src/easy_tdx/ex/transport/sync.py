@@ -119,23 +119,26 @@ class ExTdxConnection:
         self._sock = sock
 
     def close(self) -> None:
-        if self._sock is not None:
+        with self._lock:
+            sock = self._sock
+            self._sock = None
+        if sock is not None:
             try:
-                self._sock.close()
+                sock.close()
             except OSError:
                 pass
-            self._sock = None
 
     def execute(self, cmd: "BaseCommand[T]") -> T:
         """执行一条命令：发送请求，接收并解压响应，返回解析结果。"""
         with self._lock:
-            if self._sock is None:
+            sock = self._sock
+            if sock is None:
                 raise TdxConnectionError("未连接，请先调用 connect()")
             request = cmd.build_request()
             if self.mac_ex_mode and len(request) > 0 and request[0] == 0x1C:
                 request = b"\x01" + request[1:]
             try:
-                self._sock.sendall(request)
+                sock.sendall(request)
                 header_buf = self._recv_exact(HEADER_SIZE)
                 header = parse_header(header_buf)
                 raw_body = self._recv_exact(header.zipsize)

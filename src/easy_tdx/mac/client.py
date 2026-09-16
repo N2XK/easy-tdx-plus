@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import asdict
 from types import TracebackType
@@ -161,6 +162,7 @@ class MacClient:
         self._heartbeat_interval = heartbeat_interval
         self._conn = TdxConnection(self._host, self._port, self._timeout)
         self._mac_ex: MacExClient | None = None
+        self._reconnect_lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
     # 工厂方法
@@ -257,19 +259,24 @@ class MacClient:
         except TdxConnectionError:
             if not self._auto_reconnect:
                 raise
-            last_exc: TdxConnectionError | None = None
-            for delay in _RETRY_DELAYS:
-                time.sleep(delay)
-                self._conn.close()
-                self._conn = TdxConnection(self._host, self._port, self._timeout)
-                self._conn.connect()
-                if self._heartbeat_interval > 0:
-                    self._conn.start_heartbeat(self._heartbeat_interval)
+            with self._reconnect_lock:
                 try:
                     return self._conn.execute(cmd)
-                except TdxConnectionError as e:
-                    last_exc = e
-            raise last_exc  # type: ignore[misc]
+                except TdxConnectionError:
+                    pass
+                last_exc: TdxConnectionError | None = None
+                for delay in _RETRY_DELAYS:
+                    time.sleep(delay)
+                    self._conn.close()
+                    self._conn = TdxConnection(self._host, self._port, self._timeout)
+                    self._conn.connect()
+                    if self._heartbeat_interval > 0:
+                        self._conn.start_heartbeat(self._heartbeat_interval)
+                    try:
+                        return self._conn.execute(cmd)
+                    except TdxConnectionError as e:
+                        last_exc = e
+                raise last_exc  # type: ignore[misc]
 
     # ------------------------------------------------------------------ #
     # 报价

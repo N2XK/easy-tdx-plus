@@ -121,6 +121,7 @@ class ParallelTdx:
 
         def run(item: _T) -> _R:
             client = self._pool.get()
+            healthy = True
             try:
                 try:
                     return func(client, item)
@@ -132,9 +133,20 @@ class ParallelTdx:
                         pass
                     client = self._factory()
                     client.connect()
-                    return func(client, item)
+                    try:
+                        return func(client, item)
+                    except TdxConnectionError:
+                        healthy = False
+                        raise
             finally:
-                self._pool.put(client)
+                # 重连后仍失败：丢弃该连接，避免把已损坏的连接放回池中
+                if healthy:
+                    self._pool.put(client)
+                else:
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             return list(executor.map(run, items))

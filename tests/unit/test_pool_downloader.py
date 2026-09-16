@@ -248,3 +248,37 @@ def test_backfill_gaps_fills_missing(tmp_path: Path) -> None:
     assert got == {20260101, 20260102, 20260103}
     # 缺口被归为一段请求
     assert clients[0].calls == [(20260102, 20260103)]
+
+
+def test_pool_discards_broken_client(monkeypatch) -> None:
+    """重连后仍失败的连接不得放回池中（避免污染）。"""
+    from easy_tdx.exceptions import TdxConnectionError
+    from easy_tdx.parallel import ParallelTdx
+
+    created: list = []
+
+    class _BrokenClient:
+        def __init__(self) -> None:
+            self.closed = 0
+            created.append(self)
+
+        def connect(self) -> None:
+            pass
+
+        def close(self) -> None:
+            self.closed += 1
+
+    p = ParallelTdx(mode="pool", connections=1, client_factory=_BrokenClient)
+    p.start()
+
+    def boom(client, item):  # noqa: ANN001
+        raise TdxConnectionError("down")
+
+    import pytest
+
+    with pytest.raises(TdxConnectionError):
+        p.map(boom, [1])
+    # 池应为空：坏连接被 close 丢弃
+    assert p._pool.qsize() == 0
+    assert all(c.closed >= 1 for c in created)
+    p.close()

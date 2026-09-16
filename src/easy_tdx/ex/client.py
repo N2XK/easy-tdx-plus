@@ -1,6 +1,7 @@
 """扩展行情高层 API：ExTdxClient（同步）和 AsyncExTdxClient（asyncio）。"""
 
 import asyncio
+import threading
 from collections import OrderedDict
 from types import TracebackType
 from typing import TypeVar
@@ -70,6 +71,7 @@ class ExTdxClient:
         self._timeout = timeout
         self._auto_reconnect = auto_reconnect
         self._conn = ExTdxConnection(self._host, port, timeout)
+        self._reconnect_lock = threading.Lock()
 
     @classmethod
     def from_best_host(
@@ -126,10 +128,16 @@ class ExTdxClient:
         except TdxConnectionError:
             if not self._auto_reconnect:
                 raise
-            self._conn.close()
-            self._conn = ExTdxConnection(self._host, self._port, self._timeout)
-            self._conn.connect()
-            return self._conn.execute(cmd)
+            with self._reconnect_lock:
+                # 双重检查：其他线程可能已重连成功
+                try:
+                    return self._conn.execute(cmd)
+                except TdxConnectionError:
+                    pass
+                self._conn.close()
+                self._conn = ExTdxConnection(self._host, self._port, self._timeout)
+                self._conn.connect()
+                return self._conn.execute(cmd)
 
     # ------------------------------------------------------------------ #
     # 市场信息

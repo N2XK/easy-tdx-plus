@@ -144,46 +144,50 @@ class TdxConnection:
 
     def connect(self) -> None:
         """建立 TCP 连接并完成握手（发送3条 setup 命令）。"""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(self.timeout)
-        try:
-            sock.connect((self.host, self.port))
-        except OSError as e:
-            sock.close()
-            raise TdxConnectionError(f"无法连接 {self.host}:{self.port}: {e}") from e
-        self._sock = sock
-        try:
-            self._send_setup()
-        except Exception:
+        with self._lock:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.timeout)
+            try:
+                sock.connect((self.host, self.port))
+            except OSError as e:
+                sock.close()
+                raise TdxConnectionError(f"无法连接 {self.host}:{self.port}: {e}") from e
+            self._sock = sock
+            try:
+                self._send_setup()
+            except Exception:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+                self._sock = None
+                raise
+
+    def close(self) -> None:
+        """关闭连接（与 execute 互斥，避免并发使用中途 socket 被判空）。"""
+        self.stop_heartbeat()
+        with self._lock:
+            sock = self._sock
+            self._sock = None
+        if sock is not None:
             try:
                 sock.close()
             except OSError:
                 pass
-            self._sock = None
-            raise
-
-    def close(self) -> None:
-        """关闭连接。"""
-        self.stop_heartbeat()
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
-            self._sock = None
 
     def execute(self, cmd: "BaseCommand[T]") -> T:
         """执行一条命令：发送请求，接收并解压响应，返回解析结果。"""
         with self._lock:
             self._last_active = time.monotonic()
             self._consecutive_heartbeats = 0
-            if self._sock is None:
+            sock = self._sock
+            if sock is None:
                 raise TdxConnectionError("未连接，请先调用 connect()")
             # 清除服务端主动推送的残留帧，避免与下一条响应错位
             self._drain_pending()
             request = cmd.build_request()
             try:
-                self._sock.sendall(request)
+                sock.sendall(request)
                 header_buf = self._recv_exact(HEADER_SIZE)
                 header = parse_header(header_buf)
                 raw_body = self._recv_exact(header.zipsize)

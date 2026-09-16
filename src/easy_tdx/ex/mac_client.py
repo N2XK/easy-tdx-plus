@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import threading
 from datetime import date
 from types import TracebackType
 from typing import Any, TypeVar
@@ -69,6 +70,9 @@ class MacExClient:
         self._timeout = timeout
         self._auto_reconnect = auto_reconnect
         self._conn = ExTdxConnection(self._host, port, timeout, mac_ex_mode=True)
+        self._reconnect_lock = threading.Lock()
+        self._market_offsets: dict[int, int] = {}
+        self._instrument_total: int | None = None
 
     @classmethod
     def from_best_host(
@@ -140,11 +144,19 @@ class MacExClient:
         except TdxConnectionError:
             if not self._auto_reconnect:
                 raise
-            self._conn.close()
-            self._conn = ExTdxConnection(self._host, self._port, self._timeout, mac_ex_mode=True)
-            self._conn.connect()
-            self._login()
-            return self._conn.execute(cmd)
+            with self._reconnect_lock:
+                # 双重检查：其他线程可能已重连成功
+                try:
+                    return self._conn.execute(cmd)
+                except TdxConnectionError:
+                    pass
+                self._conn.close()
+                self._conn = ExTdxConnection(
+                    self._host, self._port, self._timeout, mac_ex_mode=True
+                )
+                self._conn.connect()
+                self._login()
+                return self._conn.execute(cmd)
 
     # ------------------------------------------------------------------ #
     # 商品列表
@@ -192,7 +204,7 @@ class MacExClient:
         offset = self._find_market_offset(market)
         if offset < 0:
             return pd.DataFrame()
-        total = self._execute(GetExInstrumentCountCmd())
+        total = self._instrument_count()
         page_size = 1000
         collected: list[Any] = []
         skipped = 0
@@ -217,9 +229,18 @@ class MacExClient:
             break
         return _to_df(collected)
 
+    def _instrument_count(self) -> int:
+        """商品总数（实例内缓存，扩展市场商品表在会话期间静态）。"""
+        if self._instrument_total is None:
+            self._instrument_total = self._execute(GetExInstrumentCountCmd())
+        return self._instrument_total
+
     def _find_market_offset(self, market: int) -> int:
-        """二分查找定位指定市场在全局商品列表中的起始偏移。"""
-        total = self._execute(GetExInstrumentCountCmd())
+        """二分查找定位指定市场在全局商品列表中的起始偏移（结果缓存）。"""
+        cached = self._market_offsets.get(market)
+        if cached is not None:
+            return cached
+        total = self._instrument_count()
         if total == 0:
             return -1
         lo, hi = 0, total
@@ -234,6 +255,7 @@ class MacExClient:
                 lo = mid + 1
             else:
                 hi = mid
+        self._market_offsets[market] = lo
         return lo
 
     # ------------------------------------------------------------------ #
@@ -443,6 +465,8 @@ class AsyncMacExClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._conn = AsyncExTdxConnection(self._host, port, timeout, mac_ex_mode=True)
+        self._market_offsets: dict[int, int] = {}
+        self._instrument_total: int | None = None
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
 
@@ -572,7 +596,7 @@ class AsyncMacExClient:
         offset = await self._find_market_offset(market)
         if offset < 0:
             return pd.DataFrame()
-        total = await self._execute(GetExInstrumentCountCmd())
+        total = await self._instrument_count()
         page_size = 1000
         collected: list[Any] = []
         skipped = 0
@@ -597,9 +621,18 @@ class AsyncMacExClient:
             break
         return _to_df(collected)
 
+    async def _instrument_count(self) -> int:
+        """商品总数（实例内缓存）。"""
+        if self._instrument_total is None:
+            self._instrument_total = await self._execute(GetExInstrumentCountCmd())
+        return self._instrument_total
+
     async def _find_market_offset(self, market: int) -> int:
-        """二分查找定位指定市场在全局商品列表中的起始偏移。"""
-        total = await self._execute(GetExInstrumentCountCmd())
+        """二分查找定位指定市场在全局商品列表中的起始偏移（结果缓存）。"""
+        cached = self._market_offsets.get(market)
+        if cached is not None:
+            return cached
+        total = await self._instrument_count()
         if total == 0:
             return -1
         lo, hi = 0, total
@@ -614,6 +647,7 @@ class AsyncMacExClient:
                 lo = mid + 1
             else:
                 hi = mid
+        self._market_offsets[market] = lo
         return lo
 
     # ------------------------------------------------------------------ #

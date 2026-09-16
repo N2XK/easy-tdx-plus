@@ -55,6 +55,10 @@
 
 ### Changed
 
+- **性能优化**：`get_fq_bars(qfq)` 改为按需窗口取数（qfq 与窗口无关，已对照服务端），
+  近期窗口 2016ms → **67ms**；hfq 仍取全量历史以保持基准正确。
+  MAC-EX `MacExClient.goods_list` 增加市场偏移/商品总数缓存，首次 ~460ms → 复调 **~30ms**。
+
 - `AsyncTdxClient` 与 `TdxClient` **全面对齐**：补齐基金列表、复权因子/前后复权、基础日线、公式、股票汇总、
   财报批量下载等异步版（同步方法名一一对应）。
 - 标准协议命令在旧版/纯报价服务器上**自动回退到全功能主机**（覆盖行情/逐笔/K 线）。
@@ -64,6 +68,11 @@
 
 ### Fixed
 
+- **并发竞态（稳定性）**：`TdxConnection`/`ExTdxConnection.close()` 未持锁就置空 `_sock`，与 `execute()`
+  竞争会产生 `AttributeError: 'NoneType' object has no attribute 'sendall'`。现 connect/close 加锁、
+  execute 使用本地 socket 引用；各 sync 客户端（TdxClient/MacClient/ExTdxClient/MacExClient）重连改为
+  **双重检查锁**，避免多线程重复重连。实测 8 线程×30 次：20.2s/6 错误 → **4.2s/0 错误**。
+- **`ParallelTdx` 池污染**：重连后仍失败的连接不再放回连接池（避免后续请求复用坏连接）。
 - **`get_security_list`(0x044d) 记录布局错误（严重）**：0x044d 已是 **37 字节**记录
   （`code6+volunit2+name16+...`），代码仍按旧命令 0x0450 的 29 字节解析，导致首条之后
   code/name 错位乱码、A 股被大量漏掉——`get_security_list_all` 只返回 376 只（实为 5225 只）。

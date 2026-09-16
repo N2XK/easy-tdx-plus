@@ -61,36 +61,46 @@ class TickChartsCmd(BaseCommand[MacMultiTickChart]):
         # count(2) + send_last(1) + page_size(2) + total(2)
         (count, send_last, page_size, total) = unpack_from("<HBHH", body, 64, "tick_charts header2")
 
+        # 记录为紧凑排列（共 total 条），按“分钟数回绕”切分到各日
+        groups: list[list[MacTick]] = []
+        prev_minutes = -1
+        for i in range(total):
+            offset = 71 + i * 14
+            (minutes, price, avg, vol, _reserved) = unpack_from(
+                "<HffHH", body, offset, f"tick_charts tick[{i}]"
+            )
+            if minutes >= 24 * 60:
+                continue
+            if minutes < prev_minutes and groups:
+                groups.append([])
+            elif not groups:
+                groups.append([])
+            groups[-1].append(
+                MacTick(
+                    time=time(minutes // 60, minutes % 60),
+                    price=price,
+                    avg=avg,
+                    vol=vol,
+                )
+            )
+            prev_minutes = minutes
+
         days: list[MacMultiTickDay] = []
         for d in range(count):
-            ticks: list[MacTick] = []
-            for t in range(page_size):
-                index = d * page_size + t
-                offset = 71 + index * 14
-                (minutes, price, avg, vol, tick_reserved) = unpack_from(
-                    "<HffHH", body, offset, f"tick_charts tick[{d}][{t}]"
-                )
-                ticks.append(
-                    MacTick(
-                        time=time(minutes // 60, minutes % 60),
-                        price=price,
-                        avg=avg,
-                        vol=vol,
-                    )
-                )
-
             ymd = date_ints[d]
+            if ymd == 0:
+                continue
             day_date = date(ymd // 10000, (ymd % 10000) // 100, ymd % 100)
             days.append(
                 MacMultiTickDay(
                     date=day_date,
                     pre_close=pre_close_floats[d],
-                    ticks=ticks,
+                    ticks=groups[d] if d < len(groups) else [],
                 )
             )
 
         # 尾部元数据
-        tail_offset = 71 + count * page_size * 14
+        tail_offset = 71 + total * 14
         (
             name_raw,
             _decimal,

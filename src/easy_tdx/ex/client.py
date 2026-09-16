@@ -25,6 +25,7 @@ from .commands.get_transaction import (
     GetExHistoryTransactionDataCmd,
     GetExTransactionDataCmd,
 )
+from .commands.login import MacExLoginCmd
 from .models import (
     ExInstrumentBar,
     ExInstrumentInfo,
@@ -101,6 +102,8 @@ class ExTdxClient:
 
     def connect(self) -> None:
         self._conn.connect()
+        # 扩展行情需先登录，否则 markets/商品信息 等命令会被服务器断开
+        self._conn.execute(MacExLoginCmd())
 
     def close(self) -> None:
         self._conn.close()
@@ -300,6 +303,7 @@ class AsyncExTdxClient:
 
     async def connect(self) -> None:
         await self._conn.connect()
+        await self._conn.execute(MacExLoginCmd())
         self._start_heartbeat()
 
     async def close(self) -> None:

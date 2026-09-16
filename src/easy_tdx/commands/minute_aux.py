@@ -58,7 +58,8 @@ class GetMinuteAuxCmd(BaseCommand[list[MinuteAuxPoint]]):
             + bytes([self.selector])
             + b"\x00" * 2
         )
-        header = struct.pack("<HIHH", 0x010C, 0x01010008, len(payload), len(payload))
+        pkg_len = len(payload) + 2
+        header = struct.pack("<HIHH", 0x010C, 0x01010008, pkg_len, pkg_len)
         return header + struct.pack("<H", _MSG_ID) + payload
 
     def parse_response(self, body: bytes) -> list[MinuteAuxPoint]:

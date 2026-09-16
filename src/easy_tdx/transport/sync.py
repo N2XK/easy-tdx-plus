@@ -8,7 +8,14 @@ from typing import TYPE_CHECKING, TypeVar
 
 from ..codec.frame import HEADER_SIZE, decompress_body, parse_header
 from ..commands.setup import SETUP_COMMANDS
-from ..config import get_best_host, get_calc_hosts, get_known_hosts, get_mac_hosts, get_port, get_timeout
+from ..config import (
+    get_best_host,
+    get_calc_hosts,
+    get_known_hosts,
+    get_mac_hosts,
+    get_port,
+    get_timeout,
+)
 from ..exceptions import TdxConnectionError
 
 if TYPE_CHECKING:
@@ -172,6 +179,8 @@ class TdxConnection:
             self._consecutive_heartbeats = 0
             if self._sock is None:
                 raise TdxConnectionError("未连接，请先调用 connect()")
+            # 清除服务端主动推送的残留帧，避免与下一条响应错位
+            self._drain_pending()
             request = cmd.build_request()
             try:
                 self._sock.sendall(request)
@@ -282,3 +291,21 @@ class TdxConnection:
         """循环 recv 直到读满 n 字节。"""
         assert self._sock is not None
         return _recv_exact_sock(self._sock, n)
+
+    def _drain_pending(self) -> None:
+        """丢弃套接字中已到达的残留字节（服务端主动推送帧）。
+
+        部分命令（如 0x0fd1、0x044d 等）之后服务端会附带推送帧，若不清理会与
+        下一条响应错位，导致后续请求超时。发送请求前先非阻塞清空缓冲区。
+        """
+        assert self._sock is not None
+        try:
+            self._sock.setblocking(False)
+            while True:
+                try:
+                    if not self._sock.recv(65536):
+                        break
+                except (BlockingIOError, InterruptedError):
+                    break
+        finally:
+            self._sock.settimeout(self.timeout)

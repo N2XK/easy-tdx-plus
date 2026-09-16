@@ -66,7 +66,7 @@ from .config import (
     get_timeout,
     save_best_host,
 )
-from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily
+from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily, evaluate
 from .exceptions import TdxConnectionError, TdxDecodeError
 from .f10 import F10Client, IcfqsClient
 from .fund import is_fund
@@ -1052,6 +1052,25 @@ class TdxClient:
             float_shares=float_shares or 0.0,
             total_shares=total_shares or 0.0,
         )
+
+    def get_formula(
+        self,
+        market: Market,
+        code: str,
+        formula: str,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> pd.DataFrame:
+        """在个股 K 线上计算通达信公式（指标/选股）。
+
+        Args:
+            formula: 通达信公式文本，如 ``"MA5: MA(CLOSE,5); G: CROSS(MA5, REF(MA5,1));"``。
+        """
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars = self.get_bars_range(market, code, start_date, end_date, category)
+        return evaluate(formula, bars)
 
     def get_stock_profile(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """股票信息汇总：行情 + 股本 + 市值 + 换手率 + 估值（PE/股息率）。

@@ -460,6 +460,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_basic_daily(market, code, ...)` | 前收盘 / 涨跌幅 / 换手率 / 市值 |
 | `get_stock_profile(stocks)` | 行情 + 股本 + 市值 + 换手 + 估值 汇总 |
 | `add_indicators(bars, ...)` | 技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比） |
+| `evaluate(formula, bars)` / `get_formula(...)` | 通达信公式解释器（指标/选股子集） |
 | `f10` 属性 | 7615 F10 客户端（`F10Client`） |
 
 ### 加工数据 / 派生计算 / F10
@@ -527,6 +528,14 @@ from easy_tdx import add_indicators, macd, kdj, boll, rsi, ma
 df = add_indicators(bars, ma_periods=[5, 20], rsi_periods=[6, 12])
 # 追加列：ma*, dif/dea/macd, k/d/j, boll_upper/mid/lower, rsi*, volume_ratio
 macd(bars["close"]); kdj(bars["high"], bars["low"], bars["close"]); boll(bars["close"])
+```
+
+**通达信公式解释器**（子集，独立实现）：
+
+```python
+df = c.get_formula(Market.SH, "600519", "MA5: MA(CLOSE,5); G: CROSS(MA5, MA(CLOSE,20)); R: RSI(CLOSE,6);")
+# 支持：REF/MA/EMA/SMA/SUM/HHV/LLV/STD/COUNT/CROSS/ABS/MAX/MIN/IF/RSI/BARSLAST
+#       + - * / 比较 AND OR NOT、变量赋值 : / :=、前期变量引用
 ```
 
 ### 龙虎榜 / 游资 / 每日复盘 / 题材（ICFQS 7615）

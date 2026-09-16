@@ -136,6 +136,25 @@ class AsyncF10Client:
     async def governance(self, code: str, section: str = "wgcl", arg: str = "") -> F10Response:
         return await asyncio.to_thread(self._sync.governance, code, section, arg)
 
+    async def shareholder_change_plans(
+        self, code: str, *, page: int = 1, page_size: int = 20
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._sync.shareholder_change_plans, code, page=page, page_size=page_size
+        )
+
+    async def shareholder_report_dates(self, code: str) -> F10Response:
+        return await asyncio.to_thread(self._sync.shareholder_report_dates, code)
+
+    async def top_shareholders(self, code: str, report_date: str = "") -> F10Response:
+        return await asyncio.to_thread(self._sync.top_shareholders, code, report_date)
+
+    async def institutional_holding(self, code: str, report_date: str = "") -> F10Response:
+        return await asyncio.to_thread(self._sync.institutional_holding, code, report_date)
+
+    async def shareholder_trend(self, code: str, page_size: int = 80) -> F10Response:
+        return await asyncio.to_thread(self._sync.shareholder_trend, code, page_size)
+
     async def detail(self, detail_type: str, record_id: str | int) -> F10Response:
         return await asyncio.to_thread(self._sync.detail, detail_type, record_id)
 

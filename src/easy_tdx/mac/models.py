@@ -223,18 +223,25 @@ class ServerSession:
 
 @dataclass(frozen=True)
 class CategoryCodeItem:
-    """分类代码表条目（0x124A）。
+    """代码/分类索引条目（0x124A）。
 
-    每行形如 ``flag + code(6) + name(GBK8) + 8B + tag(ASCII) + tail``，
-    记录的是通达信板块/分类指数代码（如 395001=主板Ａ股，tag=ZBAG）。
-    协议细节部分未完全确证，``raw`` 保留原始字节以便核对。
+    35 字节定长记录：``flag(1) | code(6,ASCII) | name(8,GBK) | mark(8) |
+    abbr(8,ASCII) | flags(u32)``。
+
+    - ``abbr`` 为**拼音缩写**（如 000001 平安银行 → ``PAYH``），可用于拼音检索；
+    - ``mark`` 通常为 0，仅 1 条特殊记录（399354 分析师指）为 ``0xFDCA``；
+    - ``flags`` 为分类位掩码：bit9(0x200) 恒置位，其余位与代码段相关
+      （395xxx→0x200、399xxx→0x10200、深市股票→0x1010200/0x10200），确切语义未确证；
+    - ``_raw`` 保留原始 35 字节。
     """
 
     flag: int
     code: str
     name: str
-    tag: str
-    raw: bytes = field(default=b"", repr=False, compare=False)
+    abbr: str
+    mark: int = 0
+    flags: int = 0
+    _raw: bytes = field(default=b"", repr=False, compare=False)
 
 
 class KlineOffsetInfo:

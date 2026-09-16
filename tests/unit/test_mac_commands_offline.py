@@ -174,24 +174,33 @@ def test_mac_get_goods_list_delegates_to_mac_ex(monkeypatch) -> None:
 
 
 def test_category_code_table_parse() -> None:
-    """0x124A：解析分类代码表记录（实测 35 字节/条）。"""
+    """0x124A：35 字节记录 flag|code6|name8|mark8|abbr8|flags4。"""
     import struct
 
     from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
 
+    def rec(code, name, abbr, mark=0, flags=0x200):
+        b = b"\x00" + code.encode("ascii") + name.encode("gbk").ljust(8, b"\x00")
+        b += struct.pack("<H", mark) + b"\x00" * 6
+        b += abbr.encode("ascii").ljust(8, b"\x00") + struct.pack("<I", flags)
+        assert len(b) == 35
+        return b
+
     recs = [
-        b"\x00" + b"395001" + "主板Ａ股".encode("gbk") + b"\x00" * 8 + b"ZBAG" + b"\x00" * 8,
-        b"\x00" + b"395002" + "主板Ｂ股".encode("gbk") + b"\x00" * 8 + b"ZBGB" + b"\x00" * 8,
-        b"\x00" + b"395004" + "创业板".encode("gbk") + b"\x00" * 10 + b"CYB" + b"\x00" * 8,
+        rec("395001", "主板Ａ股", "ZBAG", flags=0x200),
+        rec("000001", "平安银行", "PAYH", flags=0x1010200),
+        rec("399354", "分析师指", "FXSZS", mark=0xFDCA, flags=0x10200),
     ]
-    recs = [r[:35].ljust(35, b"\x00") for r in recs]
-    body = struct.pack("<II", 0, len(recs)) + b"".join(recs)
+    body = struct.pack(">I", 0) + struct.pack("<I", len(recs)) + b"".join(recs)
     items = KlineOffsetCmd(0, 128000).parse_response(body)
-    assert [(i.code, i.name, i.tag) for i in items] == [
+    assert [(i.code, i.name, i.abbr) for i in items] == [
         ("395001", "主板Ａ股", "ZBAG"),
-        ("395002", "主板Ｂ股", "ZBGB"),
-        ("395004", "创业板", "CYB"),
+        ("000001", "平安银行", "PAYH"),
+        ("399354", "分析师指", "FXSZS"),
     ]
+    assert items[0].flags == 0x200
+    assert items[1].flags == 0x1010200
+    assert items[2].mark == 0xFDCA
 
 
 def test_category_code_table_small_count_returns_empty() -> None:
@@ -295,7 +304,7 @@ def test_kline_offset_headers_and_records() -> None:
     cmd = KlineOffsetCmd(0, 128000)
     items = cmd.parse_response(body)
     assert cmd.total == 7 and cmd.returned == 1
-    assert [(i.code, i.name, i.tag) for i in items] == [("395001", "主板Ａ股", "ZBAG")]
+    assert [(i.code, i.name, i.abbr) for i in items] == [("395001", "主板Ａ股", "ZBAG")]
 
     # 只有头部（无记录）
     cmd2 = KlineOffsetCmd(0, 5)

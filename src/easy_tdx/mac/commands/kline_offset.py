@@ -4,11 +4,9 @@
 请求 ``offset(u32)+count(u32)+5x``；响应头部 ``Total(大端 u32)+Returned(小端 u32)``。
 
 实测：小 count（5/100）只回头部、无记录；``count=128000`` 时随后跟
-``Returned`` 条 35 字节记录，形如
-``flag(1)+code(6,ASCII)+name(8,GBK)+8B+tag(4,ASCII)+tail(8)``，
-内容是板块/分类指数代码表（395001=主板Ａ股/tag=ZBAG），每行的 tail 为
-偏移/标志元数据（语义未确证，保留 ``raw``）。头部 Total/Returned 可从
-返回表 ``df.attrs`` 获取。
+``Returned`` 条 35 字节记录：``flag(1)+code(6,ASCII)+name(8,GBK)+mark(8)
++abbr(8,ASCII)+flags(u32)``。内容为代码/分类索引（395001=主板Ａ股；
+000001=平安银行，abbr=拼音缩写 PAYH）。头部 Total/Returned 见 ``df.attrs``。
 """
 
 import struct
@@ -54,10 +52,17 @@ class KlineOffsetCmd(BaseCommand[list[CategoryCodeItem]]):
         items: list[CategoryCodeItem] = []
         for i in range(n):
             rec = data[i * _RECORD_SIZE : (i + 1) * _RECORD_SIZE]
-            flag = rec[0]
-            code = rec[1:7].decode("ascii", errors="replace").strip("\x00")
-            name = rec[7:15].decode("gbk", errors="replace").rstrip("\x00").strip()
-            tail = rec[15:]
-            tag = bytes(b for b in tail if 0x20 < b < 0x7F).decode("ascii", errors="ignore")
-            items.append(CategoryCodeItem(flag=flag, code=code, name=name, tag=tag, raw=rec))
+            (mark,) = struct.unpack_from("<H", rec, 15)
+            (flags,) = struct.unpack_from("<I", rec, 31)
+            items.append(
+                CategoryCodeItem(
+                    flag=rec[0],
+                    code=rec[1:7].decode("ascii", errors="replace").strip("\x00"),
+                    name=rec[7:15].decode("gbk", errors="replace").rstrip("\x00").strip(),
+                    abbr=rec[23:31].decode("ascii", errors="replace").rstrip("\x00").strip(),
+                    mark=mark,
+                    flags=flags,
+                    _raw=rec,
+                )
+            )
         return items

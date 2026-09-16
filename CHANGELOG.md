@@ -64,6 +64,10 @@
 
 ### Fixed
 
+- **`get_kline_offset`(0x124A) 记录布局修正**：此前把 35 字节记录切成 `tag(4)+tail(8)`，实为
+  `flag(1)+code(6)+name(8)+mark(8)+abbr(8,ASCII)+flags(u32)`；其中 **abbr 是拼音缩写**
+  （000001 平安银行→PAYH）。现模型/返回列改为 `flag/code/name/abbr/mark/flags`（`mark` 仅
+  399354 分析师指为 0xFDCA；`flags` 位掩码 bit9 恒置位、其余位与代码段相关，语义未确证）。
 - **`get_capital_flow`(0x1218) 字段口径补全**（对齐 gotdx `mac_capital_flow.go`）：今日为
   `[主力买,主力卖,散户买,散户卖]`，5 日为 `[主力买,主力卖,超大单净,大单净,中单净,小单净]`；
   此前丢失超大/小单净额，且把 5 日值塞进"今日"字段。现模型分列 `*_5d`。

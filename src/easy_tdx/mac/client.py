@@ -660,7 +660,7 @@ class MacClient:
     ) -> pd.DataFrame:
         """获取分类代码表 / K 线偏移表（0x124A）。
 
-        返回列：``flag/code/name/tag``（如 ``395001 主板Ａ股 ZBAG``）；
+        返回列：``flag/code/name/abbr/mark/flags``（如 ``000001 平安银行 PAYH``）；
         协议头部 ``Total``（大端）/``Returned``（小端）见 ``df.attrs``。
         小 ``count``（5/100）时服务端只回头部、无记录；``count`` 足够大
         （默认 128000）时返回整表。
@@ -671,7 +671,11 @@ class MacClient:
         """
         cmd = KlineOffsetCmd(offset, count)
         items = self._execute(cmd)
-        df = _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
+        df = (
+            _to_df(items)
+            if items
+            else pd.DataFrame(columns=["flag", "code", "name", "abbr", "mark", "flags"])
+        )
         df.attrs["total"] = cmd.total
         df.attrs["returned"] = cmd.returned
         return df
@@ -1242,7 +1246,11 @@ class AsyncMacClient:
         count: int = 128000,
     ) -> pd.DataFrame:
         items = await self._execute(KlineOffsetCmd(offset, count))
-        return _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
+        return (
+            _to_df(items)
+            if items
+            else pd.DataFrame(columns=["flag", "code", "name", "abbr", "mark", "flags"])
+        )
 
     # ------------------------------------------------------------------ #
     # 文件操作

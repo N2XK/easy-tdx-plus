@@ -324,6 +324,33 @@ class F10Client:
         """市场 / 行业排名明细。"""
         return self.params(ENTRY_RANKING_DETAIL, _code6(code), section)
 
+    def shareholder_report_dates(self, code: str) -> F10Response:
+        """股东研究可用报告期（``sdgd`` 不带日期时返回 prerq/rq）。"""
+        return self.params(ENTRY_SHAREHOLDER_CHANGE, _code6(code), "sdgd", "", "", "1", "1", "50")
+
+    def top_shareholders(self, code: str, report_date: str = "") -> F10Response:
+        """十大股东（``sdgd``）。
+
+        Args:
+            report_date: 报告期 YYYYMMDD；为空时返回可用报告期（见 ``shareholder_report_dates``）。
+                指定后每行含 ``gd``（股东名）/``cgs``（持股数）/``bl``（比例%）/``xz``（性质）等。
+        """
+        return self.params(
+            ENTRY_SHAREHOLDER_CHANGE, _code6(code), "sdgd", report_date, "", "1", "1", "20"
+        )
+
+    def institutional_holding(self, code: str, report_date: str = "") -> F10Response:
+        """机构持股（``jgcg``），字段为服务端 T 代码。"""
+        return self.params(
+            ENTRY_SHAREHOLDER_CHANGE, _code6(code), "jgcg", report_date, "", "1", "1", "20"
+        )
+
+    def shareholder_trend(self, code: str, page_size: int = 80) -> F10Response:
+        """十大流通股东/持股趋势（``ltgd``，``rq`` + T004/T013/T016/T019）。"""
+        return self.params(
+            ENTRY_SHAREHOLDER_CHANGE, _code6(code), "ltgd", "", "", "1", "1", str(page_size)
+        )
+
     def governance(self, code: str, section: str = "wgcl", arg: str = "") -> F10Response:
         """资本运作治理（wgcl 违规处理 / dbmx 担保明细）。"""
         return self.params(ENTRY_GOVERNANCE, section, _code6(code), arg)

@@ -68,6 +68,31 @@ def test_parse_handles_missing_sets() -> None:
     assert resp.rows == ()
 
 
+def test_shareholder_sections_params() -> None:
+    from easy_tdx.f10.entries import ENTRY_SHAREHOLDER_CHANGE
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    c = F10Client(transport=fake, cache=False)
+
+    c.shareholder_report_dates("600519")
+    assert fake.calls[-1] == (
+        ENTRY_SHAREHOLDER_CHANGE,
+        {"Params": ["600519", "sdgd", "", "", "1", "1", "50"]},
+    )
+
+    c.top_shareholders("sh600519", "20240930")
+    assert fake.calls[-1] == (
+        ENTRY_SHAREHOLDER_CHANGE,
+        {"Params": ["600519", "sdgd", "20240930", "", "1", "1", "20"]},
+    )
+
+    c.institutional_holding("600519")
+    assert fake.calls[-1][1]["Params"][1] == "jgcg"
+
+    c.shareholder_trend("600519", page_size=40)
+    assert fake.calls[-1][1]["Params"] == ["600519", "ltgd", "", "", "1", "1", "40"]
+
+
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)

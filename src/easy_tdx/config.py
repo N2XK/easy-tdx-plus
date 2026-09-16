@@ -26,9 +26,12 @@
 
 import json
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
+
+_SAVE_LOCK = threading.Lock()
 
 _CONFIG_DIR = Path(os.environ.get("EASY_TDX_CONFIG_DIR", str(Path.home() / ".easy_tdx")))
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
@@ -161,10 +164,13 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
+    # 并发安全：用进程/线程唯一的临时文件名 + 进程内锁，避免多线程同时写导致
+    # 一方 replace 后另一方 tmp 丢失（ParallelTdx 回退时会多线程写配置）。
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = _CONFIG_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
-    tmp.replace(_CONFIG_FILE)
+    tmp = _CONFIG_FILE.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    with _SAVE_LOCK:
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+        tmp.replace(_CONFIG_FILE)
 
 
 # ---------------------------------------------------------------------------

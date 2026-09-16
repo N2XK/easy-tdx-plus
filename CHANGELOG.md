@@ -44,6 +44,7 @@
   通用分页 helper `_paginate`、基金识别、CLI（`easy-tdx`）。
 - **下载器增强**：`_coverage.json` 覆盖区间；`verify_coverage`（按交易日历查缺口）、`backfill_gaps`（补拉缺口）；
   同键合并**以新数据为准**（修正/复权更新生效）。
+- **并发**：`ParallelTdx(mode="direct")` 每请求独立连接（参考 tdxrs：高并发下比连接池更稳）。
 - **可配置重试**：`TdxClient(retry_delays=...)` / 环境变量 `EASY_TDX_RETRY_DELAYS` / config.json `retry_delays`。
 - **服务器能力探测与选路**：`probe_capabilities`/`get_capabilities`（分项能力，缓存+持久化）；`from_best_host(require=[...])` 按能力选主机。
 - **CLI**：`easy-tdx ping --caps` 附带能力列；新增 `easy-tdx caps` 命令（可 `--host`/`--limit`/`--refresh`）。
@@ -57,6 +58,8 @@
 
 ### Fixed
 
+- `config._save` 并发写竞争：`ParallelTdx` 多线程回退写配置时，固定 `config.tmp` 会被竞争移走导致 `FileNotFoundError`；
+  改为进程/线程唯一临时名 + 进程内锁。
 - F10/TQLEX 网关偶发返回空：`F10Client` 对空结果做有限重试（`empty_retries`），且空响应不入缓存。
 - `ping_all` 单台主机失败不再中断整体优选。
 - 修复 `get_security_list`(0x044d) 与 `get_sparkline`(0x0fd1) 同连接重复调用超时。

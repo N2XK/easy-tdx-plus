@@ -1,7 +1,8 @@
-"""并发取数：轻量连接池。
+"""并发取数：连接池 / 直连两种模式。
 
-持有 N 个 :class:`~easy_tdx.client.TdxClient` 连接，供多线程并发取数。
-每个连接同一时刻只被一个 worker 使用（队列借用），互相隔离。
+- ``mode="pool"``（默认）：持有 N 个 :class:`~easy_tdx.client.TdxClient` 复用（队列借用）。
+- ``mode="direct"``：每个请求独立新建 TCP 连接、用完即关；高并发下更稳（参考 tdxrs 的
+  ``TdxDirectClient``：60 线程近零退化，而连接池会因争用退化）。
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import threading
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from .client import TdxClient
 from .exceptions import TdxConnectionError
@@ -26,10 +27,11 @@ class ParallelTdx:
 
     Args:
         host: 服务器地址（None 时用默认最佳主机）。
-        connections: 连接数（也是默认并发度）。
+        connections: 连接数（pool 模式为池大小，也是默认并发度）。
         timeout: 单请求超时。
         rate_limit: 是否为每个连接启用交易时段限流。
         client_factory: 自定义客户端工厂（测试注入用）。
+        mode: ``"pool"``（默认）复用连接；``"direct"`` 每请求独立连接。
     """
 
     def __init__(
@@ -39,10 +41,12 @@ class ParallelTdx:
         timeout: float | None = None,
         rate_limit: bool = False,
         client_factory: Callable[[], TdxClient] | None = None,
+        mode: Literal["pool", "direct"] = "pool",
     ) -> None:
         self.host = host
         self.connections = max(1, connections)
         self.timeout = timeout
+        self.mode = mode
         self._factory = client_factory or (
             lambda: TdxClient(host, timeout=timeout, rate_limit=rate_limit)
         )
@@ -55,11 +59,12 @@ class ParallelTdx:
         with self._lock:
             if self._started:
                 return self
-            for _ in range(self.connections):
-                client = self._factory()
-                client.connect()
-                self._clients.append(client)
-                self._pool.put(client)
+            if self.mode == "pool":
+                for _ in range(self.connections):
+                    client = self._factory()
+                    client.connect()
+                    self._clients.append(client)
+                    self._pool.put(client)
             self._started = True
         return self
 
@@ -93,6 +98,26 @@ class ParallelTdx:
         """并发对 ``items`` 执行 ``func(client, item)``，保持输入顺序。"""
         if not self._started:
             self.start()
+        max_workers = workers or self.connections
+
+        if self.mode == "direct":
+
+            def run_direct(item: _T) -> _R:
+                client = self._factory()
+                client.connect()
+                try:
+                    try:
+                        return func(client, item)
+                    except TdxConnectionError:
+                        client.close()
+                        client = self._factory()
+                        client.connect()
+                        return func(client, item)
+                finally:
+                    client.close()
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                return list(executor.map(run_direct, items))
 
         def run(item: _T) -> _R:
             client = self._pool.get()
@@ -111,5 +136,5 @@ class ParallelTdx:
             finally:
                 self._pool.put(client)
 
-        with ThreadPoolExecutor(max_workers=workers or self.connections) as pool:
-            return list(pool.map(run, items))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            return list(executor.map(run, items))

@@ -64,6 +64,22 @@ def test_parallel_recreates_on_connection_error() -> None:
     assert len(created) == 3
 
 
+def test_parallel_direct_mode() -> None:
+    created: list[_FakeClient] = []
+
+    def factory() -> _FakeClient:
+        c = _FakeClient()
+        created.append(c)
+        return c
+
+    with ParallelTdx(connections=2, client_factory=factory, mode="direct") as pool:
+        assert created == []  # direct 模式不在 start 预建连接
+        result = pool.map(lambda c, x: x * 2, [1, 2, 3, 4, 5])
+    assert result == [2, 4, 6, 8, 10]
+    assert len(created) == 5  # 每 item 独立连接
+    assert all(c.closed for c in created)
+
+
 def _bars(date_int: int) -> pd.DataFrame:
     d = pd.Timestamp(str(date_int))
     return pd.DataFrame(
@@ -183,9 +199,7 @@ def test_downloader_new_data_wins_on_duplicate(tmp_path: Path) -> None:
 
 
 def test_verify_coverage_reports_gap(tmp_path: Path) -> None:
-    dl = Downloader(
-        tmp_path, connections=1, client_factory=_DownloadFakeClient, end_date=20260103
-    )
+    dl = Downloader(tmp_path, connections=1, client_factory=_DownloadFakeClient, end_date=20260103)
     stocks = [(Market.SH, "600519")]
     dl.download_daily(stocks, start_date=20260101, fmt="csv")  # 假客户端只回 0101
     rep = dl.verify_coverage(stocks, trading_days=[20260101, 20260102, 20260103])

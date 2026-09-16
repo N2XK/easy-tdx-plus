@@ -1,9 +1,15 @@
 """离线测试：专业财务数据解析。"""
 
 import struct
+import zipfile
+from pathlib import Path
+
+import pytest
 
 from easy_tdx.codec.financial import parse_financial_dat, parse_financial_file_list
+from easy_tdx.exceptions import TdxFileNotFoundError
 from easy_tdx.models.finance import FinancialFileInfo, FinancialRecord
+from easy_tdx.offline import read_history_financial, read_history_financial_df
 
 
 class TestParseFinancialFileList:
@@ -114,3 +120,36 @@ class TestFinancialModels:
         )
         assert r.market == Market.SH
         assert len(r.fields) == 2
+
+
+class TestReadHistoryFinancialOffline:
+    def _dat(self) -> bytes:
+        return TestParseFinancialDat()._build_dat(
+            stocks=[("000001", 0, [1.0, 2.0]), ("600036", 1, [3.0, 4.0])]
+        )
+
+    def test_read_dat(self, tmp_path: Path) -> None:
+        path = tmp_path / "gpcw20260331.dat"
+        path.write_bytes(self._dat())
+        records = read_history_financial(path)
+        assert len(records) == 2
+        assert records[0].code == "000001"
+        assert records[0].report_date == 20260331
+
+    def test_read_df(self, tmp_path: Path) -> None:
+        path = tmp_path / "gpcw20260331.dat"
+        path.write_bytes(self._dat())
+        df = read_history_financial_df(path)
+        assert list(df.columns[:3]) == ["code", "market", "report_date"]
+        assert float(df.iloc[0]["f0"]) == 1.0
+        assert int(df.iloc[1]["market"]) == 1
+
+    def test_read_zip(self, tmp_path: Path) -> None:
+        path = tmp_path / "gpcw20260331.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("gpcw20260331.dat", self._dat())
+        assert len(read_history_financial(path)) == 2
+
+    def test_missing_file(self, tmp_path: Path) -> None:
+        with pytest.raises(TdxFileNotFoundError):
+            read_history_financial(tmp_path / "nope.dat")

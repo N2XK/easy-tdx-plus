@@ -3,6 +3,8 @@
 import zipfile
 from pathlib import Path
 
+import pandas as pd
+
 from ..codec.financial import parse_financial_dat
 from ..exceptions import TdxFileNotFoundError, TdxOfflineError
 from ..models.enums import Market
@@ -32,8 +34,9 @@ def read_history_financial(filepath: str | Path) -> list[FinancialRecord]:
     raw_records = parse_financial_dat(data)
     results: list[FinancialRecord] = []
     for code, market_byte, report_date, fields in raw_records:
+        value = market_byte[0] if isinstance(market_byte, (bytes, bytearray)) else int(market_byte)
         try:
-            market = Market(market_byte)
+            market = Market(value)
         except ValueError:
             market = Market.SZ  # 默认深圳
         results.append(
@@ -45,6 +48,29 @@ def read_history_financial(filepath: str | Path) -> list[FinancialRecord]:
             )
         )
     return results
+
+
+def read_history_financial_df(filepath: str | Path) -> pd.DataFrame:
+    """从本地 gpcw*.dat / .zip 读取历史财务并转 DataFrame。
+
+    列为 ``code / market / report_date`` 加位置字段 ``f0..fN``（字段含义随报告期
+    不同，见对应 gpcw 的字段定义）。``report_date`` 可用于构造 point-in-time 面板。
+    """
+    records = read_history_financial(filepath)
+    if not records:
+        return pd.DataFrame(columns=["code", "market", "report_date"])
+    width = max((len(r.fields) for r in records), default=0)
+    rows: list[dict[str, object]] = []
+    for r in records:
+        row: dict[str, object] = {
+            "code": r.code,
+            "market": int(r.market),
+            "report_date": r.report_date,
+        }
+        for i in range(width):
+            row[f"f{i}"] = r.fields[i] if i < len(r.fields) else None
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def _read_from_zip(zip_path: Path) -> bytes:

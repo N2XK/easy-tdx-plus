@@ -480,7 +480,7 @@ F10 覆盖 20+ Entry：公司概况、财务报表、主营构成、分红融资
 排名、治理、详情、公告/新闻/路演、涨跌停榜。未封装的 Entry 可用
 `F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`。
 
-更多示例见 [`examples/`](examples/)，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)。
+更多示例见 [`examples/`](examples/)，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)，**数据字典见 [`docs/数据字典.md`](docs/数据字典.md)**。
 
 ### 并发 / 下载 / 限流 / 基金 / 校验
 

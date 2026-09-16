@@ -167,3 +167,70 @@ def test_downloader_validate_skips_bad(tmp_path: Path) -> None:
     assert "sh600519" in dl.errors
     assert not (tmp_path / "sh600519.csv").exists()
     assert dl._load_manifest().get("sh600519") is None
+
+
+def test_downloader_new_data_wins_on_duplicate(tmp_path: Path) -> None:
+    dl = Downloader(tmp_path, connections=1, client_factory=_FakeClient)
+    a = _bars(20260101)
+    a.loc[0, "close"] = 1.0
+    dl._append("sh600519", a, "csv")
+    b = _bars(20260101)
+    b.loc[0, "close"] = 9.0
+    dl._append("sh600519", b, "csv")  # 同键应以新数据为准
+    saved = pd.read_csv(tmp_path / "sh600519.csv")
+    assert len(saved) == 1
+    assert saved.iloc[0]["close"] == 9.0
+
+
+def test_verify_coverage_reports_gap(tmp_path: Path) -> None:
+    dl = Downloader(
+        tmp_path, connections=1, client_factory=_DownloadFakeClient, end_date=20260103
+    )
+    stocks = [(Market.SH, "600519")]
+    dl.download_daily(stocks, start_date=20260101, fmt="csv")  # 假客户端只回 0101
+    rep = dl.verify_coverage(stocks, trading_days=[20260101, 20260102, 20260103])
+    row = rep.iloc[0]
+    assert row["rows"] == 1
+    assert row["covered_from"] == 20260101 and row["covered_to"] == 20260103
+    assert row["expected"] == 3 and row["missing"] == 2
+    assert row["missing_dates"] == [20260102, 20260103]
+
+
+class _RangeFakeClient(_FakeClient):
+    """按 [begin, end] 每个自然日返回一行。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[tuple[int, int]] = []
+
+    def get_bars_range(
+        self, market: Market, code: str, begin: int, end: int, category: KlineCategory
+    ) -> pd.DataFrame:
+        self.calls.append((begin, end))
+        if begin > end:
+            return pd.DataFrame()
+        days = pd.date_range(str(begin), str(end), freq="D")
+        frames = [_bars(int(x.strftime("%Y%m%d"))) for x in days]
+        return pd.concat(frames, ignore_index=True)
+
+
+def test_backfill_gaps_fills_missing(tmp_path: Path) -> None:
+    clients: list[_RangeFakeClient] = []
+
+    def factory() -> _RangeFakeClient:
+        c = _RangeFakeClient()
+        clients.append(c)
+        return c
+
+    dl = Downloader(tmp_path, connections=1, client_factory=factory, end_date=20260103)
+    # 造一个"覆盖 [0101,0103] 但只有 0101"的状态
+    dl._append("sh600519", _bars(20260101), "csv")
+    dl._save_coverage({"sh600519": {"from": 20260101, "to": 20260103}})
+
+    added = dl.backfill_gaps([(Market.SH, "600519")], trading_days=[20260101, 20260102, 20260103])
+    assert added["sh600519"] == 2  # 0102、0103 补齐
+    saved = pd.read_csv(tmp_path / "sh600519.csv")
+    got = set(pd.to_datetime(saved["date"]).dt.strftime("%Y%m%d").astype(int))
+    assert got == {20260101, 20260102, 20260103}
+    # 缺口被归为一段请求
+    assert clients[0].calls == [(20260102, 20260103)]

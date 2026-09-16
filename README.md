@@ -539,7 +539,8 @@ funds = c.get_fund_list(Market.SH)
 ```
 
 - `ParallelTdx`：N 连接并发，队列借用、互相隔离。
-- `Downloader`：按代码落盘 + `_manifest.json` 增量/续传，`fmt="csv"|"parquet"`。
+- `Downloader`：按代码落盘 + `_manifest.json` 增量/续传，`fmt="csv"|"parquet"`；`_coverage.json` 记录覆盖区间，
+  `verify_coverage(stocks, trading_days)` 查缺口、`backfill_gaps(...)` 补拉缺口区间；同键以新数据为准。
 - `RateLimiter` / `detect_phase`：交易时段自适应限流。
 - `classify_fund` / `is_fund` / `get_fund_list`：基金识别。
 - `validate_bars` / `check_bars`：OHLC 关系 / 非有限值 / 负量校验。

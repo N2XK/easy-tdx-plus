@@ -42,6 +42,8 @@
   运算符、变量赋值 `:`/`:=`、别名 IFF/AVERAGE/STDDEV。
 - **工程**：限流（交易时段自适应）、连接池 `ParallelTdx`、批量下载器 `Downloader`、K 线语义校验、
   通用分页 helper `_paginate`、基金识别、CLI（`easy-tdx`）。
+- **下载器增强**：`_coverage.json` 覆盖区间；`verify_coverage`（按交易日历查缺口）、`backfill_gaps`（补拉缺口）；
+  同键合并**以新数据为准**（修正/复权更新生效）。
 - **可配置重试**：`TdxClient(retry_delays=...)` / 环境变量 `EASY_TDX_RETRY_DELAYS` / config.json `retry_delays`。
 - **服务器能力探测与选路**：`probe_capabilities`/`get_capabilities`（分项能力，缓存+持久化）；`from_best_host(require=[...])` 按能力选主机。
 - **CLI**：`easy-tdx ping --caps` 附带能力列；新增 `easy-tdx caps` 命令（可 `--host`/`--limit`/`--refresh`）。

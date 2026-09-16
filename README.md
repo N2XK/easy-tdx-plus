@@ -142,8 +142,10 @@ easy-tdx ex tick HK_MAIN_BOARD 00700 --table               # 港股分时
 | `market-stat` | 全市场涨跌统计 |
 | `server-info` | 服务器交易时段 |
 | `symbol-info` | 个股特征快照 |
-| `f10` | F10 公司信息 |
-| `fund-flow` | 历史资金流向 |
+| `history-transaction` | 某历史日全部逐笔（自动分页） |
+| `trading-calendar` | 交易日列表（含节假日） |
+| `f10` | F10 公司信息（占位，未实现） |
+| `fund-flow` | 历史资金流向（占位，未实现） |
 | `ex kline` | 扩展市场 K 线 |
 | `ex quote` | 扩展市场报价 |
 | `ex quote-list` | 扩展市场商品列表 |

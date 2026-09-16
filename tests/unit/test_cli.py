@@ -207,3 +207,43 @@ def test_f10_stub_errors(runner: CliRunner) -> None:
 def test_fund_flow_stub_errors(runner: CliRunner) -> None:
     res = runner.invoke(cli, ["fund-flow", "SZ", "000001"])
     assert res.exit_code != 0
+
+
+class _StdCtx:
+    """替身：模拟 with TdxClient.from_best_host() as c。"""
+
+    def __init__(self, **methods: object) -> None:
+        self._client = _FakeClient(**methods)
+
+    def __enter__(self) -> _FakeClient:
+        return self._client
+
+    def __exit__(self, *a: object) -> bool:
+        return False
+
+
+def test_history_transaction(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "easy_tdx.client.TdxClient.from_best_host",
+        classmethod(
+            lambda cls, *a, **k: _StdCtx(get_history_transaction_all=lambda *a, **k: _df())
+        ),
+    )
+    res = runner.invoke(cli, ["history-transaction", "SZ", "000001", "20240102", "--table"])
+    assert res.exit_code == 0, res.output
+    assert "000001" in res.output
+
+
+def test_trading_calendar(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import date
+
+    from easy_tdx import TradingCalendar
+
+    cal = TradingCalendar([date(2024, 1, 2), date(2024, 1, 3)])
+    monkeypatch.setattr(
+        "easy_tdx.client.TdxClient.from_best_host",
+        classmethod(lambda cls, *a, **k: _StdCtx(get_trading_calendar=lambda *a, **k: cal)),
+    )
+    res = runner.invoke(cli, ["trading-calendar", "--days", "2"])
+    assert res.exit_code == 0, res.output
+    assert "2024-01-03" in res.output

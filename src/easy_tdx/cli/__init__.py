@@ -10,6 +10,7 @@ from .cmd_board import belong_board, board_list, board_members
 from .cmd_capital import capital_flow
 from .cmd_ex import ex
 from .cmd_finance import f10, fund_flow
+from .cmd_history import history_transaction, trading_calendar
 from .cmd_info import server_info, symbol_info
 from .cmd_kline import kline
 from .cmd_monitor import market_stat, unusual
@@ -57,3 +58,5 @@ cli.add_command(symbol_info)
 cli.add_command(f10)
 cli.add_command(fund_flow)
 cli.add_command(ex)
+cli.add_command(history_transaction)
+cli.add_command(trading_calendar)

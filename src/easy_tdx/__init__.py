@@ -162,4 +162,4 @@ __all__ = [
     "save_best_ex_host",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

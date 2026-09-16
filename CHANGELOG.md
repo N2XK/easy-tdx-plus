@@ -62,6 +62,8 @@
 
 ### Fixed
 
+- **版本号单一来源**：`easy_tdx.__version__` 此前仍为 `1.0.0`，与 `pyproject.toml`/CLI 的 `1.1.0` 不一致；
+  现以 `src/easy_tdx/__init__.py` 为唯一源（hatch 动态版本），CLI 从包读取。
 - **ICFQS 网关路由**：龙虎榜(`cfg_fx_yzlhb`)/每日复盘(`cfg_tk_mrfp`) 需走 `hot.icfqs.com`，此前全走默认网关导致
   HTTP 503；现按入口自动选网关。
 - `config._save` 并发写竞争：`ParallelTdx` 多线程回退写配置时，固定 `config.tmp` 会被竞争移走导致 `FileNotFoundError`；

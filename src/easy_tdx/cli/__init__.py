@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from .. import __version__
 from .cmd_admin import caps, ping, version
 from .cmd_auction import auction
 from .cmd_board import belong_board, board_list, board_members
@@ -20,7 +21,7 @@ from .cmd_transaction import transaction
 
 
 @click.group()
-@click.version_option(version="1.1.0", prog_name="easy-tdx")
+@click.version_option(version=__version__, prog_name="easy-tdx")
 def cli() -> None:
     """easy-tdx -- 通达信行情数据 CLI（默认 JSON 输出，适合 Agent 使用）。
 

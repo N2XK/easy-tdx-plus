@@ -105,4 +105,6 @@ def caps(
 @click.command()
 def version() -> None:
     """显示版本号。"""
-    click.echo("easy-tdx 1.1.0")
+    from .. import __version__
+
+    click.echo(f"easy-tdx {__version__}")

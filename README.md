@@ -23,6 +23,29 @@ easy-tdx --help
 pip install -e ".[dev]"
 ```
 
+## 快速上手（Python）
+
+```python
+from easy_tdx import TdxClient, Market, KlineCategory
+
+with TdxClient.from_best_host() as c:
+    # 实时报价（五档）
+    q = c.get_security_quotes([(Market.SH, "600519")])
+
+    # 日线区间（自动分页/升序/去重）
+    bars = c.get_bars_range(Market.SH, "600519", 20240101, 20241231, KlineCategory.DAY)
+
+    # 某历史日的全部逐笔（自动分页）
+    txn = c.get_history_transaction_all(Market.SZ, "000001", 20240102)
+
+    # 交易日历（由上证指数日线构建，天然含节假日）
+    cal = c.get_trading_calendar(20240101)
+    cal.is_trading_day(20240101)        # False（元旦）
+    cal.prev_trading_day(20240102)      # 2023-12-29
+```
+
+MAC 协议（服务端复权/竞价/板块等）与 asyncio 版本见下文 [Python API](#python-api)。
+
 ## CLI 参考
 
 `easy-tdx` 默认输出 JSON（一行一条记录），`--table` 切换表格，`--output csv` 输出 CSV。
@@ -604,14 +627,31 @@ src/easy_tdx/
 
 commands 层不依赖 transport，可独立单测。
 
+## 文档
+
+- [接口数据字典](docs/数据字典.md)——各方法/命令/字段与口径
+- [能力矩阵](docs/能力矩阵.md)——各通道能力实测状态与限制速查
+- [补全方案](docs/ROADMAP_补全方案.md)——实施状态
+
+## 常见坑 / 已知限制
+
+- **`Market.BJ` 证券列表不稳定**：`get_security_list(Market.BJ, ...)` 服务器端长期超时，`get_security_list_all()` 默认不含北交所。
+- **涨跌停价**：`SecurityQuote.limit_up/limit_down` 默认为 `None`，请用 `get_price_limits()` / `compute_price_limits()` 按板块规则计算。
+- **服务器差异**：部分旧版/纯报价节点不响应实时行情、逐笔、标准 K 线等命令（返回残缺或空）。`_execute_std` 已自动回退到全功能主机（`get_full_featured_hosts()`）。
+- **历史逐笔**：优先用 `get_history_transaction_all()`（按日拉取，实测可回溯多年），无需解析官方 g3tic/g4tic 的 `.htc`（记录级格式未公开，见 `docs/数据字典.md`）。
+- **帧长度字段**：部分新标准命令（0x0452/0x051c/0x051d/0x051a/0x053f/0x0547）长度 = payload + 2。
+- **KDJ 口径**：公式 `SMA(RSV,3,1)` 与内置 `kdj()` 在初始窗口种子不同（指标以 50 填充），约 30 根后收敛一致。
+- **`.htc` 分笔容器**：`iter_htc`/`read_htc` 仅解到容器/标的帧；记录级解码未实现（无公开规范）。
+
 ## 开发
 
 ```bash
 python -m pytest tests/unit/ -v                             # 单元测试（无需网络）
+python -m pytest tests/unit/ --cov=easy_tdx                 # 覆盖率（fail_under=50）
 XMTDX_LIVE=1 python -m pytest tests/integration/ -v        # 集成测试
-mypy src/                                                    # 类型检查
-ruff check src/ tests/                                       # lint
-ruff format --check src/ tests/                              # format check
+mypy src/                                                    # 类型检查（strict）
+ruff check src/ tests/ examples/                            # lint
+ruff format --check src/ tests/ examples/                   # format check
 ```
 
 ## 致谢

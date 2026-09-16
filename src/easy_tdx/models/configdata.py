@@ -192,6 +192,17 @@ class TdxBjCode:
 
 
 @dataclass
+class TdxBjMore:
+    """北交所股票补充（来自 tdxbjmore.cfg，``市场|代码|类型|名称|标志|``）。"""
+
+    market: int
+    code: str
+    type: int
+    name: str
+    flag: int
+
+
+@dataclass
 class TdxConcept:
     """港股/美股 个股 ↔ 概念/行业映射（来自 tdxhkag.cfg / tdxmgag.cfg）。"""
 

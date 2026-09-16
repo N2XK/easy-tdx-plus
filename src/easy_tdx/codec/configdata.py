@@ -14,6 +14,7 @@ from ..models.configdata import (
     TdxAdr,
     TdxAhRate,
     TdxBjCode,
+    TdxBjMore,
     TdxBk,
     TdxBroker,
     TdxChain,
@@ -432,6 +433,27 @@ def parse_bj_code_map(data: bytes) -> list[TdxBjCode]:
                 new_code=f[2],
                 name=f[3],
                 date=_field(f, 4),
+            )
+        )
+    return out
+
+
+def parse_bj_more(data: bytes) -> list[TdxBjMore]:
+    """解析 tdxbjmore.cfg → 北交所股票补充（``市场|代码|类型|名称|标志|``）。"""
+    out: list[TdxBjMore] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 4 or f[1] == "":
+            continue
+        out.append(
+            TdxBjMore(
+                market=_to_int(f[0]),
+                code=f[1],
+                type=_to_int(f[2]),
+                name=f[3],
+                flag=_to_int(_field(f, 4)),
             )
         )
     return out

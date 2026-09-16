@@ -25,6 +25,7 @@ from .codec.block import parse_block_dat
 from .codec.configdata import (
     fill_block_index_with_alias,
     parse_bj_code_map,
+    parse_bj_more,
     parse_brokers,
     parse_code_name_table,
     parse_concept_map,
@@ -1215,6 +1216,10 @@ class TdxClient:
         """北交所新旧代码对照（addedcode_bj.cfg）：market/old_code/new_code/name/date。"""
         return _to_df(parse_bj_code_map(self._zhb_member("addedcode_bj.cfg")))
 
+    def get_bj_more(self) -> pd.DataFrame:
+        """北交所股票补充（tdxbjmore.cfg）：market/code/type/name/flag。"""
+        return _to_df(parse_bj_more(self._zhb_member("tdxbjmore.cfg")))
+
     def get_hk_stock_concepts(self) -> pd.DataFrame:
         """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""
         return _to_df(parse_concept_map(self._zhb_member("tdxhkag.cfg")))
@@ -2316,6 +2321,10 @@ class AsyncTdxClient:
     async def get_bj_code_map(self) -> pd.DataFrame:
         """北交所新旧代码对照（addedcode_bj.cfg）。"""
         return _to_df(parse_bj_code_map(await self._zhb_member_async("addedcode_bj.cfg")))
+
+    async def get_bj_more(self) -> pd.DataFrame:
+        """北交所股票补充（tdxbjmore.cfg）。"""
+        return _to_df(parse_bj_more(await self._zhb_member_async("tdxbjmore.cfg")))
 
     async def get_hk_stock_concepts(self) -> pd.DataFrame:
         """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""

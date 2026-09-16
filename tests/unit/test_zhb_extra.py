@@ -7,6 +7,7 @@ import pytest
 from easy_tdx import TdxClient
 from easy_tdx.codec.configdata import (
     parse_bj_code_map,
+    parse_bj_more,
     parse_brokers,
     parse_code_name_table,
     parse_concept_map,
@@ -92,6 +93,12 @@ def test_parse_bj_and_concept() -> None:
     assert len(bj) == 1 and bj[0].old_code == "832000" and bj[0].new_code == "920000"
     con = parse_concept_map(_gbk("AAPL|苹果电脑||苹果概念||880574|美股-苹果概念|US0219|\r\n"))
     assert con[0].block_name == "美股-苹果概念" and con[0].ext_code == "US0219"
+
+
+def test_parse_bj_more() -> None:
+    out = parse_bj_more(_gbk("44|920000|2|安徽凤凰|1|\r\n44|920001|2|纬达光电|1|\r\n"))
+    assert len(out) == 2
+    assert (out[0].code, out[0].name, out[0].type, out[0].flag) == ("920000", "安徽凤凰", 2, 1)
 
 
 def test_parse_ini() -> None:

@@ -274,7 +274,7 @@ class Downloader:
                 rec["missing_dates"] = missing
             else:
                 rec["expected"] = None
-                rec["missing"] = None if day_set is not None else None
+                rec["missing"] = None
                 rec["missing_dates"] = []
             rows.append(rec)
         return pd.DataFrame(rows)

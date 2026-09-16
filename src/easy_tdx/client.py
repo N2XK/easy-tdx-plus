@@ -164,6 +164,31 @@ async def _paginate_async(
     return pd.concat(frames, ignore_index=True)
 
 
+def _parse_gpcw_listing(
+    listing: pd.DataFrame, start_date: int, end_date: int
+) -> list[tuple[int, str]]:
+    """从财报文件列表筛出报告期在 [start,end] 内的 (date, filename)，按日期升序。"""
+    import re
+
+    out: list[tuple[int, str]] = []
+    for filename in listing["filename"]:
+        m = re.search(r"(\d{8})", str(filename))
+        if m and start_date <= int(m.group(1)) <= end_date:
+            out.append((int(m.group(1)), str(filename)))
+    out.sort()
+    return out
+
+
+def _write_zip_atomically(target: Path, data: bytes) -> bool:
+    """校验 zip 魔数后原子写入；非 zip/空返回 False。"""
+    if not data or not data.startswith(b"PK"):
+        return False
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(target)
+    return True
+
+
 def _assemble_stock_profile(
     stocks: list[tuple[Market, str]],
     quotes: pd.DataFrame,
@@ -1532,40 +1557,20 @@ class TdxClient:
         Returns:
             下载或已存在的本地文件路径列表（按报告期升序）。
         """
-        import re
-
         if end_date is None:
             end_date = _today_in_shanghai()
         out_dir = Path(data_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         listing = self.get_financial_file_list(host)
-        if listing.empty:
-            return []
-
-        entries: list[tuple[int, str]] = []
-        for filename in listing["filename"]:
-            m = re.search(r"(\d{8})", str(filename))
-            if not m:
-                continue
-            date = int(m.group(1))
-            if start_date <= date <= end_date:
-                entries.append((date, str(filename)))
-        entries.sort()
-
         written: list[Path] = []
-        for _date, filename in entries:
+        for _date, filename in _parse_gpcw_listing(listing, start_date, end_date):
             target = out_dir / Path(filename).name
             if target.is_file() and target.stat().st_size > 0 and not overwrite:
                 written.append(target)
                 continue
             fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
-            data = self.get_financial_file(fetch_name, host)
-            if not data or not data.startswith(b"PK"):
-                continue
-            tmp = target.with_suffix(target.suffix + ".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(target)
-            written.append(target)
+            if _write_zip_atomically(target, self.get_financial_file(fetch_name, host)):
+                written.append(target)
         return written
 
     def get_market_stat(self) -> pd.DataFrame:
@@ -2244,36 +2249,21 @@ class AsyncTdxClient:
         host: str | None = None,
     ) -> list[Path]:
         """批量下载季度历史财务（gpcw*.zip）到本地，支持断点续传。"""
-        import re
-
         if end_date is None:
             end_date = _today_in_shanghai()
         out_dir = Path(data_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         listing = await self.get_financial_file_list(host)
-        if listing.empty:
-            return []
-        entries: list[tuple[int, str]] = []
-        for filename in listing["filename"]:
-            m = re.search(r"(\d{8})", str(filename))
-            if m and start_date <= int(m.group(1)) <= end_date:
-                entries.append((int(m.group(1)), str(filename)))
-        entries.sort()
-
         written: list[Path] = []
-        for _date, filename in entries:
+        for _date, filename in _parse_gpcw_listing(listing, start_date, end_date):
             target = out_dir / Path(filename).name
             if target.is_file() and target.stat().st_size > 0 and not overwrite:
                 written.append(target)
                 continue
             fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
             data = await self.get_financial_file(fetch_name, host)
-            if not data or not data.startswith(b"PK"):
-                continue
-            tmp = target.with_suffix(target.suffix + ".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(target)
-            written.append(target)
+            if _write_zip_atomically(target, data):
+                written.append(target)
         return written
 
     @staticmethod

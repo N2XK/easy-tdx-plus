@@ -21,6 +21,7 @@ asyncio 版本::
 """
 
 from ._df import to_tuples
+from .capabilities import FEATURES, probe_capabilities
 from .client import AsyncTdxClient, TdxClient
 from .config import save_best_ex_host, save_best_host
 from .derive import add_indicators, boll, ema, evaluate, kdj, ma, macd, rsi, volume_ratio
@@ -134,6 +135,8 @@ __all__ = [
     "ParallelTdx",
     "Downloader",
     "TradingCalendar",
+    "probe_capabilities",
+    "FEATURES",
     "RateLimiter",
     "AsyncRateLimiter",
     "detect_phase",

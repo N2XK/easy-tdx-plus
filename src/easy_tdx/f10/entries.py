@@ -4,6 +4,8 @@ from __future__ import annotations
 
 DEFAULT_TQLEX_BASE_URL = "http://static.tdx.com.cn:7615/TQLEX"
 DEFAULT_LIMIT_BOARD_BASE_URL = "http://hot.icfqs.com:7615/TQLEX"
+# tdxhub 网关：同 TQLEX 协议，额外提供 TdxSharePCCW / TdxShareCW 命名空间的 F10 入口
+ALT_TQLEX_BASE_URL = "http://tdxhub.icfqs.com:7615/TQLEX"
 DEFAULT_QSID = "tdx"
 
 ENTRY_STOCK_INFO = "CWServ.tdxf10_gg_comreq"
@@ -27,5 +29,10 @@ ENTRY_CACHE = "CWSearch.tzx_rcache"
 ENTRY_LIMIT_BOARD_LADDER = "CWServ.cfg_fx_lbtt"
 ENTRY_THEME_MARKET = "HQServ.hq_nlp_tcihq"
 ENTRY_VALUATION = "HQServ.hq_nlp_gpsj"
+
+# tdxhub（ALT_TQLEX_BASE_URL）额外入口
+ENTRY_ALT_SHARE_CAPITAL = "TdxSharePCCW.tdxf10_gg_gbjg"
+ENTRY_ALT_VALUATION_HISTORY = "TdxShareCW.ph_agf10_gzfx"
+ENTRY_ALT_HOT_TOPIC_OVERVIEW = "TdxSharePCCW.tdxf10_gg_rdtc"
 
 MARKET_TO_ID = {"sz": 0, "sh": 1, "bj": 2}

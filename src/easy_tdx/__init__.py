@@ -36,6 +36,7 @@ from .exceptions import (
     TdxValidationError,
 )
 from .f10 import (
+    AltF10Client,
     AsyncF10Client,
     AsyncIcfqsClient,
     F10Client,
@@ -82,6 +83,7 @@ __all__ = [
     "TdxClient",
     "AsyncTdxClient",
     "F10Client",
+    "AltF10Client",
     "AsyncF10Client",
     "F10Response",
     "F10ResultSet",

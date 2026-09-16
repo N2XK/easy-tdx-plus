@@ -134,6 +134,29 @@ def test_empty_not_cached() -> None:
     assert t.count == 4  # 每次 1 次原始 + 1 次重试；空响应不缓存
 
 
+def test_alt_f10_client_params() -> None:
+    from easy_tdx.f10 import AltF10Client
+    from easy_tdx.f10.entries import (
+        ALT_TQLEX_BASE_URL,
+        ENTRY_ALT_HOT_TOPIC_OVERVIEW,
+        ENTRY_ALT_SHARE_CAPITAL,
+        ENTRY_ALT_VALUATION_HISTORY,
+    )
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    c = AltF10Client(transport=fake, empty_retries=0)
+    assert c.base_url == ALT_TQLEX_BASE_URL
+
+    c.share_capital_structure("sh600519")
+    assert fake.calls[-1] == (ENTRY_ALT_SHARE_CAPITAL, {"Params": ["600519", "gbjg"]})
+
+    c.valuation_history("600519", "3Y", "PB")
+    assert fake.calls[-1] == (ENTRY_ALT_VALUATION_HISTORY, {"Params": ["600519", "3Y", "PB"]})
+
+    c.hot_topic_overview("000001")
+    assert fake.calls[-1] == (ENTRY_ALT_HOT_TOPIC_OVERVIEW, {"Params": ["000001", "xxmmg"]})
+
+
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)

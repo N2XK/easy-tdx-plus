@@ -47,6 +47,8 @@
 - **并发**：`ParallelTdx(mode="direct")` 每请求独立连接（参考 tdxrs：高并发下比连接池更稳）。
 - **可配置重试**：`TdxClient(retry_delays=...)` / 环境变量 `EASY_TDX_RETRY_DELAYS` / config.json `retry_delays`。
 - **服务器能力探测与选路**：`probe_capabilities`/`get_capabilities`（分项能力，缓存+持久化）；`from_best_host(require=[...])` 按能力选主机。
+- **统一客户端容错**：`UnifiedTdxClient`/`AsyncUnifiedTdxClient` 对重叠方法（行情/逐笔）**MAC 优先、标准协议兜底**
+  （`fallback_std=False` 可关闭）。
 - **CLI**：`easy-tdx ping --caps` 附带能力列；新增 `easy-tdx caps` 命令（可 `--host`/`--limit`/`--refresh`）。
 
 ### Changed

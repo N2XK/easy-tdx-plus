@@ -7,8 +7,10 @@ from typing import Any
 
 import pandas as pd
 
+from .client import AsyncTdxClient, TdxClient
 from .codec.bitmap import Fields
 from .ex.mac_client import AsyncMacExClient, MacExClient
+from .exceptions import TdxError
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
     Adjust,
@@ -19,13 +21,15 @@ from .mac.enums import (
     SortOrder,
     SortType,
 )
+from .models.enums import Market
 
 
 class UnifiedTdxClient:
     """统一通达信行情客户端。
 
     自动路由：A 股方法代理到 MacClient，扩展市场方法代理到 MacExClient。
-    MacClient 在 connect()/__enter__ 时立即连接；MacExClient 延迟到首次使用。
+    对**两种协议重叠**的方法（行情/逐笔），默认 **MAC 优先、标准协议兜底**，
+    避免某台 MAC 主机异常导致整体不可用（`fallback_std=False` 可关闭）。
 
     用法::
 
@@ -38,11 +42,15 @@ class UnifiedTdxClient:
         self,
         heartbeat_interval: float = 15.0,
         timeout: float = 15.0,
+        fallback_std: bool = True,
+        std_client: TdxClient | None = None,
     ) -> None:
         self._heartbeat_interval = heartbeat_interval
         self._timeout = timeout
+        self._fallback_std = fallback_std
         self._mac: MacClient | None = None
         self._mac_ex: MacExClient | None = None
+        self._std: TdxClient | None = std_client
 
     def connect(self) -> None:
         self._ensure_mac()
@@ -54,6 +62,9 @@ class UnifiedTdxClient:
         if self._mac_ex is not None:
             self._mac_ex.close()
             self._mac_ex = None
+        if self._std is not None:
+            self._std.close()
+            self._std = None
 
     def disconnect(self) -> None:
         self.close()
@@ -89,6 +100,29 @@ class UnifiedTdxClient:
             self._mac_ex.connect()
         return self._mac_ex
 
+    def _ensure_std(self) -> TdxClient:
+        if self._std is None:
+            self._std = TdxClient.from_best_host(timeout=self._timeout)
+            self._std.connect()
+        return self._std
+
+    def _mac_then_std(self, mac_call: Any, std_call: Any) -> pd.DataFrame:
+        """重叠能力：MAC 优先，异常或空结果时回退标准协议（`fallback_std=False` 可关闭）。"""
+        try:
+            df = mac_call()
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+        except TdxError:
+            if not self._fallback_std:
+                raise
+        if not self._fallback_std:
+            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+        return std_call()
+
+    @staticmethod
+    def _market(market: int) -> Market:
+        return Market(market)
+
     # ------------------------------------------------------------------ #
     # A 股方法 (proxy to MacClient)
     # ------------------------------------------------------------------ #
@@ -98,7 +132,12 @@ class UnifiedTdxClient:
         stocks: list[tuple[int, str]],
         fields: Fields | None = None,
     ) -> pd.DataFrame:
-        return self._ensure_mac().get_stock_quotes(stocks, fields)
+        """批量报价：MAC 优先，失败/空时回退标准协议（回退结果按标准协议字段）。"""
+        std_stocks = [(self._market(m), code) for m, code in stocks]
+        return self._mac_then_std(
+            lambda: self._ensure_mac().get_stock_quotes(stocks, fields),
+            lambda: self._ensure_std().get_security_quotes(std_stocks),
+        )
 
     def get_stock_quotes_list(
         self,
@@ -154,7 +193,19 @@ class UnifiedTdxClient:
         start: int = 0,
         date: int | None = None,
     ) -> pd.DataFrame:
-        return self._ensure_mac().get_transactions(market, code, count, start, date)
+        """逐笔成交：MAC 优先，失败/空时回退标准协议（当日 / 历史按 date 自动选）。"""
+        mkt = self._market(market)
+
+        def _std() -> pd.DataFrame:
+            c = self._ensure_std()
+            if date is None:
+                return c.get_transaction_data(mkt, code, start, count)
+            return c.get_history_transaction_data(mkt, code, date, start, count)
+
+        return self._mac_then_std(
+            lambda: self._ensure_mac().get_transactions(market, code, count, start, date),
+            _std,
+        )
 
     def get_symbol_info(self, market: int, code: str) -> pd.DataFrame:
         return self._ensure_mac().get_symbol_info(market, code)
@@ -307,11 +358,15 @@ class AsyncUnifiedTdxClient:
         self,
         heartbeat_interval: float = 15.0,
         timeout: float = 15.0,
+        fallback_std: bool = True,
+        std_client: AsyncTdxClient | None = None,
     ) -> None:
         self._heartbeat_interval = heartbeat_interval
         self._timeout = timeout
+        self._fallback_std = fallback_std
         self._mac: AsyncMacClient | None = None
         self._mac_ex: AsyncMacExClient | None = None
+        self._std: AsyncTdxClient | None = std_client
 
     async def connect(self) -> None:
         await self._ensure_mac()
@@ -323,6 +378,9 @@ class AsyncUnifiedTdxClient:
         if self._mac_ex is not None:
             await self._mac_ex.close()
             self._mac_ex = None
+        if self._std is not None:
+            await self._std.close()
+            self._std = None
 
     async def disconnect(self) -> None:
         await self.close()
@@ -358,6 +416,26 @@ class AsyncUnifiedTdxClient:
             await self._mac_ex.connect()
         return self._mac_ex
 
+    async def _ensure_std(self) -> AsyncTdxClient:
+        if self._std is None:
+            self._std = AsyncTdxClient.from_best_host(timeout=self._timeout)
+            await self._std.connect()
+        return self._std
+
+    async def _mac_then_std(self, mac_call: Any, std_call: Any) -> pd.DataFrame:
+        """重叠能力：MAC 优先，异常或空结果时回退标准协议。"""
+        df: pd.DataFrame | None = None
+        try:
+            df = await mac_call()
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+        except TdxError:
+            if not self._fallback_std:
+                raise
+        if not self._fallback_std:
+            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+        return await std_call()
+
     # ------------------------------------------------------------------ #
     # A 股方法 (proxy to AsyncMacClient)
     # ------------------------------------------------------------------ #
@@ -368,7 +446,13 @@ class AsyncUnifiedTdxClient:
         fields: Fields | None = None,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()
-        return await mac.get_stock_quotes(stocks, fields)
+        std_stocks = [(Market(m), code) for m, code in stocks]
+
+        async def _std() -> pd.DataFrame:
+            c = await self._ensure_std()
+            return await c.get_security_quotes(std_stocks)
+
+        return await self._mac_then_std(lambda: mac.get_stock_quotes(stocks, fields), _std)
 
     async def get_stock_quotes_list(
         self,
@@ -430,7 +514,17 @@ class AsyncUnifiedTdxClient:
         date: int | None = None,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()
-        return await mac.get_transactions(market, code, count, start, date)
+        mkt = Market(market)
+
+        async def _std() -> pd.DataFrame:
+            c = await self._ensure_std()
+            if date is None:
+                return await c.get_transaction_data(mkt, code, start, count)
+            return await c.get_history_transaction_data(mkt, code, date, start, count)
+
+        return await self._mac_then_std(
+            lambda: mac.get_transactions(market, code, count, start, date), _std
+        )
 
     async def get_symbol_info(self, market: int, code: str) -> pd.DataFrame:
         mac = await self._ensure_mac()

@@ -298,6 +298,10 @@ with UnifiedTdxClient() as client:
     df = client.goods_kline(ExMarket.HK_MAIN_BOARD, "00700", Period.DAILY, count=5)
 ```
 
+> 对**两种协议重叠**的方法（`get_stock_quotes` / `get_transactions`），统一客户端默认 **MAC 优先、标准协议兜底**
+> （某台 MAC 主机异常或返回空时自动切标准协议，回退结果按标准协议字段）。`UnifiedTdxClient(fallback_std=False)` 可关闭。
+> 异步版 `AsyncUnifiedTdxClient` 行为一致。
+
 ### 标准协议
 
 ```python

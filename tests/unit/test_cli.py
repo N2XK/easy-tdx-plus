@@ -273,3 +273,32 @@ def test_trading_calendar(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) ->
     res = runner.invoke(cli, ["trading-calendar", "--days", "2"])
     assert res.exit_code == 0, res.output
     assert "2024-01-03" in res.output
+
+
+def test_conn_context_managers(monkeypatch: pytest.MonkeyPatch) -> None:
+    import easy_tdx.cli.conn as conn
+
+    class _C:
+        def __init__(self) -> None:
+            self.connected = False
+            self.closed = False
+
+        def connect(self) -> None:
+            self.connected = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    mac, ex = _C(), _C()
+    monkeypatch.setattr(
+        "easy_tdx.mac.client.MacClient.from_best_host", classmethod(lambda cls, *a, **k: mac)
+    )
+    monkeypatch.setattr(
+        "easy_tdx.ex.mac_client.MacExClient.from_best_host", classmethod(lambda cls, *a, **k: ex)
+    )
+    with conn.get_mac_client() as c:
+        assert c is mac and mac.connected
+    assert mac.closed
+    with conn.get_mac_ex_client() as c:
+        assert c is ex and ex.connected
+    assert ex.closed

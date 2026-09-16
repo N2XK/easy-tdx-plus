@@ -98,6 +98,7 @@ class GetExInstrumentQuoteListCmd(BaseCommand[list[OrderedDict[str, object]]]):
             _u13,
             _u14,
             _u15,
+            _u16,
         ) = struct.unpack("<IfffffIIIIfIIfIfIIIIIIIIIfIIIIIIIII", body[pos : pos + 140])
         pos += 290
         results.append(

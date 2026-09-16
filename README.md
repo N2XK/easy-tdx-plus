@@ -659,6 +659,9 @@ python benchmarks/bench.py                                  # 性能基准（离
 python benchmarks/bench.py --live                           # 追加联网基准
 ```
 
+发布：更新 `pyproject.toml` 版本与 `CHANGELOG.md` 后打标签 `git tag v1.2.0 && git push origin v1.2.0`，
+`.github/workflows/release.yml` 会自动构建、发布到 PyPI（Trusted Publishing）并创建 GitHub Release。
+
 ## 致谢
 
 - [pytdx](https://github.com/rainx/pytdx) -- 离线数据读取模块借鉴自 pytdx 项目，感谢 rainx 及所有贡献者

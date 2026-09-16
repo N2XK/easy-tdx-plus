@@ -345,3 +345,33 @@ def test_get_security_features_all_paginates(monkeypatch: pytest.MonkeyPatch) ->
     df = c.get_security_features_all(count=2000)
     assert calls == [0, 2000]
     assert len(df) == 2001
+
+
+def test_finance_info_cache_and_clear(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Fin:
+        liutong_guben: float = 100.0
+        zong_guben: float = 200.0
+
+    c = _client()
+    calls: list[int] = []
+
+    def fake_execute(cmd: object) -> list[_Fin]:
+        calls.append(1)
+        return [_Fin()]
+
+    monkeypatch.setattr(c, "_execute", fake_execute)
+    first = c.get_finance_info(Market.SZ, "000001")
+    second = c.get_finance_info(Market.SZ, "000001")
+    assert len(calls) == 1  # 命中缓存
+    assert float(first.iloc[0]["liutong_guben"]) == 100.0
+    assert float(second.iloc[0]["zong_guben"]) == 200.0
+
+    c.get_finance_info(Market.SZ, "000001", use_cache=False)
+    assert len(calls) == 2
+
+    c.clear_cache()
+    c.get_finance_info(Market.SZ, "000001")
+    assert len(calls) == 3

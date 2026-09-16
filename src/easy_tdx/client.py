@@ -179,6 +179,7 @@ _STD_PROBE_LIMIT = 6
 _STD_CAPABILITY_CACHE: dict[str, tuple[float, bool]] = {}
 _STD_CAPABILITY_TTL = 3600.0
 _CALENDAR_TTL = 3600.0
+_FINANCE_TTL = 3600.0
 
 
 def _probe_standard_capability(host: str, port: int, timeout: float) -> bool:
@@ -360,6 +361,7 @@ class TdxClient:
         self._calendar_cache: dict[
             tuple[Market, str, KlineCategory, int, int], tuple[float, TradingCalendar]
         ] = {}
+        self._finance_cache: dict[tuple[Market, str], tuple[float, pd.DataFrame]] = {}
         self._limiter: RateLimiter | None = RateLimiter() if rate_limit else None
         if self._limiter is not None:
             self._limiter.auto_detect_phase()
@@ -372,6 +374,13 @@ class TdxClient:
     def auto_detect_phase(self) -> str | None:
         """按当前时间自动检测限流时段。"""
         return self._limiter.auto_detect_phase() if self._limiter is not None else None
+
+    def clear_cache(self) -> None:
+        """清空进程内缓存（交易日历 / 财务信息 / 配置加工 / 主机能力探测）。"""
+        self._calendar_cache.clear()
+        self._finance_cache.clear()
+        self._zhb_cache = None
+        _STD_CAPABILITY_CACHE.clear()
 
     def _rate_acquire(self) -> None:
         if self._limiter is not None:
@@ -995,9 +1004,24 @@ class TdxClient:
         """获取除权除息历史记录。"""
         return _to_df(self._execute(GetXdxrInfoCmd(market, code)))
 
-    def get_finance_info(self, market: Market, code: str) -> pd.DataFrame:
-        """获取最新财务数据。"""
-        return _to_df(self._execute(GetFinanceInfoCmd(market, code)))
+    def get_finance_info(
+        self, market: Market, code: str, *, use_cache: bool = True
+    ) -> pd.DataFrame:
+        """获取最新财务数据。
+
+        Args:
+            use_cache: 命中进程内缓存（TTL 1h）时直接返回，避免批量场景重复请求。
+                财务数据按季度披露，短时缓存安全；需要强制刷新时传 ``use_cache=False``。
+        """
+        key = (market, code)
+        if use_cache:
+            cached = self._finance_cache.get(key)
+            if cached is not None and time.monotonic() - cached[0] < _FINANCE_TTL:
+                return cached[1].copy()
+        df = _to_df(self._execute(GetFinanceInfoCmd(market, code)))
+        if use_cache:
+            self._finance_cache[key] = (time.monotonic(), df.copy())
+        return df
 
     def get_company_info_category(self, market: Market, code: str) -> pd.DataFrame:
         """获取公司信息文件目录。"""
@@ -1470,6 +1494,7 @@ class AsyncTdxClient:
         self._calendar_cache: dict[
             tuple[Market, str, KlineCategory, int, int], tuple[float, TradingCalendar]
         ] = {}
+        self._finance_cache: dict[tuple[Market, str], tuple[float, pd.DataFrame]] = {}
         self._limiter: AsyncRateLimiter | None = AsyncRateLimiter() if rate_limit else None
         if self._limiter is not None:
             self._limiter.auto_detect_phase()
@@ -1482,6 +1507,13 @@ class AsyncTdxClient:
     def auto_detect_phase(self) -> str | None:
         """按当前时间自动检测限流时段。"""
         return self._limiter.auto_detect_phase() if self._limiter is not None else None
+
+    def clear_cache(self) -> None:
+        """清空进程内缓存（交易日历 / 财务信息 / 配置加工 / 主机能力探测）。"""
+        self._calendar_cache.clear()
+        self._finance_cache.clear()
+        self._zhb_cache = None
+        _STD_CAPABILITY_CACHE.clear()
 
     @classmethod
     def from_best_host(
@@ -1990,8 +2022,18 @@ class AsyncTdxClient:
     async def get_xdxr_info(self, market: Market, code: str) -> pd.DataFrame:
         return _to_df(await self._execute(GetXdxrInfoCmd(market, code)))
 
-    async def get_finance_info(self, market: Market, code: str) -> pd.DataFrame:
-        return _to_df(await self._execute(GetFinanceInfoCmd(market, code)))
+    async def get_finance_info(
+        self, market: Market, code: str, *, use_cache: bool = True
+    ) -> pd.DataFrame:
+        key = (market, code)
+        if use_cache:
+            cached = self._finance_cache.get(key)
+            if cached is not None and time.monotonic() - cached[0] < _FINANCE_TTL:
+                return cached[1].copy()
+        df = _to_df(await self._execute(GetFinanceInfoCmd(market, code)))
+        if use_cache:
+            self._finance_cache[key] = (time.monotonic(), df.copy())
+        return df
 
     async def get_company_info_category(self, market: Market, code: str) -> pd.DataFrame:
         return _to_df(await self._execute(GetCompanyInfoCategoryCmd(market, code)))

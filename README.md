@@ -443,6 +443,12 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_report_file(filename)` | 下载服务器文件 |
 | `get_market_stat()` | 全市场涨跌统计 |
 | `get_price_limits(market, code, name, pre_close)` | 涨跌停价 |
+| `get_security_features(start, count)` | 证券扩展特征（0x0452，特殊涨跌停限制表） |
+| `get_quotes_encrypt(stocks)` | 加密批量五档（0x0547，≤100 只） |
+| `get_index_info(market, code)` | 指数概况（0x051d，涨跌家数/委托分布） |
+| `get_index_momentum(market, code)` | 指数动量（0x051c，累计序列） |
+| `get_top_board(size)` | 排行榜（0x053f，9 组榜单） |
+| `get_volume_profile(market, code)` | 成交分布（0x051a，价格档位 + 内外盘） |
 | `get_zhb_files()` | 下载并解压 zhb.zip（46 个配置文件） |
 | `get_tdx_stat()` / `get_tdx_stat2()` | 个股统计 / 资金流+板块归属 |
 | `get_xgsg()` | 新股申购 |
@@ -480,7 +486,7 @@ F10 覆盖 20+ Entry：公司概况、财务报表、主营构成、分红融资
 排名、治理、详情、公告/新闻/路演、涨跌停榜。未封装的 Entry 可用
 `F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`。
 
-更多示例见 [`examples/`](examples/)，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)，**数据字典见 [`docs/数据字典.md`](docs/数据字典.md)**。
+更多示例见 [`examples/`](examples/)，**数据字典见 [`docs/数据字典.md`](docs/数据字典.md)**，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)，验证结果见 [`docs/验证报告.md`](docs/验证报告.md)。
 
 ### 并发 / 下载 / 限流 / 基金 / 校验
 
@@ -542,7 +548,15 @@ hot.lhb_detail("600519", "20260801", "20260915")    # 个股龙虎榜
 hot.lhb_yz_detail("600519", "20260801", "20260915") # 游资明细
 ```
 
-`client.icfqs` 为 `TdxClient` 上的懒加载属性。
+`client.icfqs` 为 `TdxClient` 上的懒加载属性；异步版 `AsyncIcfqsClient`。
+
+### 扩展市场（7727）
+
+`ExTdxClient` / `AsyncExTdxClient`：`get_markets` / `get_instrument_count` / `get_instrument_info` /
+`get_instrument_quote(_list)` / `get_instrument_bars` / `get_minute_time_data` / `get_transaction_data` /
+`get_server_info`(0x2455) / `get_table`(0x2422)。
+`MacExClient`：`goods_count/list/quotes/kline/tick_chart/chart_sampling/transaction`（港/美/期货）。
+> 连接后自动完成扩展登录（0x2454）。
 
 ## 架构
 

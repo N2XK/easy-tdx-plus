@@ -62,6 +62,8 @@
 
 ### Fixed
 
+- `UnifiedTdxClient.get_stock_kline` 回退映射：`Period.MINS/DAYS` 会被 `KlineCategory(int())` 误映射为 `MIN_3/YEAR`；
+  改用**显式映射表**，无对应周期时不回退（返回空）。
 - **版本号单一来源**：`easy_tdx.__version__` 此前仍为 `1.0.0`，与 `pyproject.toml`/CLI 的 `1.1.0` 不一致；
   现以 `src/easy_tdx/__init__.py` 为唯一源（hatch 动态版本），CLI 从包读取。
 - **ICFQS 网关路由**：龙虎榜(`cfg_fx_yzlhb`)/每日复盘(`cfg_tk_mrfp`) 需走 `hot.icfqs.com`，此前全走默认网关导致

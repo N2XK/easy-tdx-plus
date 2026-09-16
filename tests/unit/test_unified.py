@@ -38,6 +38,22 @@ class _FakeMac:
             return pd.DataFrame()
         return _df("mac")
 
+    def get_stock_kline(
+        self,
+        market: int,
+        code: str,
+        period: object,
+        start: int = 0,
+        count: int = 800,
+        times: int = 1,
+        adjust: object = None,
+    ) -> pd.DataFrame:
+        if self.kind == "err":
+            raise TdxConnectionError("mac down")
+        if self.kind == "empty":
+            return pd.DataFrame()
+        return _df("mac")
+
     def close(self) -> None:
         pass
 
@@ -48,6 +64,12 @@ class _FakeStd:
 
     def get_security_quotes(self, stocks: object) -> pd.DataFrame:
         self.calls.append("quotes")
+        return _df("std")
+
+    def get_bars(
+        self, market: object, code: str, category: object, start: int, count: int
+    ) -> pd.DataFrame:
+        self.calls.append(f"bars:{category}")
         return _df("std")
 
     def get_transaction_data(
@@ -103,6 +125,25 @@ def test_fallback_disabled_raises() -> None:
 def test_fallback_disabled_empty_returns_empty() -> None:
     c, _mac, std = _client("empty", fallback=False)
     assert c.get_stock_quotes([(1, "600519")]).empty
+    assert std.calls == []
+
+
+def test_kline_fallback_maps_category() -> None:
+    from easy_tdx.mac.enums import Period
+    from easy_tdx.models.enums import KlineCategory
+
+    c, _mac, std = _client("err")
+    df = c.get_stock_kline(0, "000001", Period.DAILY, count=10)
+    assert df.iloc[0]["src"] == "std"
+    assert std.calls == [f"bars:{KlineCategory.DAY}"]
+
+
+def test_kline_fallback_skips_unsupported_period() -> None:
+    from easy_tdx.mac.enums import Period
+
+    c, _mac, std = _client("err")
+    # Period.DAYS（多日）无标准协议等价 → 不回退、返回空
+    assert c.get_stock_kline(0, "000001", Period.DAYS, count=10).empty
     assert std.calls == []
 
 

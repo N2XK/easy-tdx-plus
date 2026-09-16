@@ -23,6 +23,27 @@ from .mac.enums import (
 )
 from .models.enums import KlineCategory, Market
 
+# MAC Period → 标准协议 KlineCategory（仅可安全对应的周期；其余不支持回退）
+_PERIOD_TO_CATEGORY: dict[Period, KlineCategory] = {
+    Period.MIN_1: KlineCategory.MIN_1,
+    Period.MIN_5: KlineCategory.MIN_5,
+    Period.MIN_15: KlineCategory.MIN_15,
+    Period.MIN_30: KlineCategory.MIN_30,
+    Period.MIN_60: KlineCategory.MIN_60,
+    Period.DAILY: KlineCategory.DAY,
+    Period.WEEKLY: KlineCategory.WEEK,
+    Period.MONTHLY: KlineCategory.MONTH,
+    Period.QUARTERLY: KlineCategory.SEASON,
+    Period.YEARLY: KlineCategory.YEAR,
+}
+
+
+def _period_to_category(period: Any) -> KlineCategory | None:
+    try:
+        return _PERIOD_TO_CATEGORY.get(Period(int(period)))
+    except ValueError:
+        return None
+
 
 class UnifiedTdxClient:
     """统一通达信行情客户端。
@@ -169,9 +190,8 @@ class UnifiedTdxClient:
         """
 
         def _std() -> pd.DataFrame:
-            try:
-                cat = KlineCategory(int(period))
-            except ValueError:
+            cat = _period_to_category(period)
+            if cat is None:
                 return pd.DataFrame()
             return self._ensure_std().get_bars(self._market(market), code, cat, start, count)
 
@@ -499,9 +519,8 @@ class AsyncUnifiedTdxClient:
         mac = await self._ensure_mac()
 
         async def _std() -> pd.DataFrame:
-            try:
-                cat = KlineCategory(int(period))
-            except ValueError:
+            cat = _period_to_category(period)
+            if cat is None:
                 return pd.DataFrame()
             c = await self._ensure_std()
             return await c.get_bars(Market(market), code, cat, start, count)

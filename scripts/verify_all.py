@@ -147,6 +147,7 @@ def run_standard() -> None:
             g, "get_company_info_category", lambda: c.get_company_info_category(Market.SH, "600519")
         )
         check(g, "get_financial_file_list", lambda: c.get_financial_file_list())
+        check(g, "get_financial_records", lambda: c.get_financial_records("gpcw20260331.zip"))
         check(g, "get_fund_flow", lambda: c.get_fund_flow(Market.SH, "600519"))
         check(
             g, "get_history_fund_flow", lambda: c.get_history_fund_flow(Market.SH, "600519", 0, 30)

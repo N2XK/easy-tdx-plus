@@ -62,6 +62,10 @@
 
 ### Fixed
 
+- **能力缓存**：`probe_capabilities(features=subset)` 不再用子集**覆盖**全量快照（改为合并）；
+  连接/握手失败仅在进程内缓存，**不写入** `config.json`，避免瞬时网络抖动被持久化为"不支持"达 1 小时。
+- **`config.json` 读-改-写竞争**：`save_best_host`/`save_best_ex_host`/`save_best_mac_ex_host`/`save_capability`
+  改为在锁内 load→modify→save（`_mutate`），避免并行连接时基于过期快照互相覆盖或丢字段。
 - `UnifiedTdxClient.get_stock_kline` 回退映射：`Period.MINS/DAYS` 会被 `KlineCategory(int())` 误映射为 `MIN_3/YEAR`；
   改用**显式映射表**，无对应周期时不回退（返回空）。
 - **版本号单一来源**：`easy_tdx.__version__` 此前仍为 `1.0.0`，与 `pyproject.toml`/CLI 的 `1.1.0` 不一致；

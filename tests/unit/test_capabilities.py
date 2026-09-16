@@ -64,6 +64,26 @@ def test_probe_capabilities_connection_error() -> None:
 
     caps = cap.probe_capabilities("9.9.9.9", 7709, 0.1, connection_factory=boom)
     assert caps == {name: False for name in cap.FEATURES}
+    # 连接失败不得写入 config.json（避免瞬时抖动被持久化为"不支持"）
+    assert "9.9.9.9:7709" not in cfg.get_capability_cache()
+
+
+def test_probe_subset_merges_into_full_snapshot() -> None:
+    cap.probe_capabilities("1.2.3.4", 7709, 1.0, connection_factory=lambda: _FakeConn())
+
+    # 只探测子集：不得覆盖已有全量缓存
+    sub = cap.probe_capabilities(
+        "1.2.3.4",
+        7709,
+        1.0,
+        features=["finance"],
+        refresh=True,
+        connection_factory=lambda: _FakeConn(missing={"GetFinanceInfoCmd"}),
+    )
+    assert sub["finance"] is False
+    assert sub["quotes"] is True  # 合并保留了全量快照
+    saved = cfg.get_capability_cache()["1.2.3.4:7709"]["caps"]
+    assert saved["quotes"] is True and saved["finance"] is False
 
 
 def test_select_host_prefers_capable() -> None:

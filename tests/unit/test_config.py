@@ -83,3 +83,47 @@ def test_concurrent_save_is_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         t.join()
     assert errors == []
     assert (tmp_path / "config.json").exists()
+
+
+def test_mutate_serializes_concurrent_saves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """读-改-写必须串行化：并发的 save_* 必须看到彼此已写入的字段。"""
+    import threading
+    import time
+
+    monkeypatch.setattr(config, "_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config, "_CONFIG_FILE", tmp_path / "config.json")
+    config.save_best_host("9.9.9.9")
+
+    real_load = config._load
+    entered = threading.Event()
+    gate = threading.Event()
+    t2_snapshot: list[dict] = []
+
+    def delayed_load() -> dict:
+        name = threading.current_thread().name
+        if name == "writer1":
+            entered.set()
+            gate.wait(2)
+        snap = real_load()
+        if name == "writer2":
+            t2_snapshot.append(snap)
+        return snap
+
+    monkeypatch.setattr(config, "_load", delayed_load)
+    t1 = threading.Thread(target=lambda: config.save_best_host("1.1.1.1"), name="writer1")
+    t2 = threading.Thread(target=lambda: config.save_best_ex_host("2.2.2.2"), name="writer2")
+    t1.start()
+    assert entered.wait(2)
+    t2.start()
+    time.sleep(0.1)
+    assert t2_snapshot == []  # writer1 持锁期间 writer2 不得读到快照
+    gate.set()
+    t1.join(3)
+    t2.join(3)
+
+    assert t2_snapshot and t2_snapshot[0].get("best_host") == "1.1.1.1"
+    saved = real_load()
+    assert saved["best_host"] == "1.1.1.1"
+    assert saved["best_ex_host"] == "2.2.2.2"

@@ -53,6 +53,17 @@ def _probe(conn: Any, features: Iterable[str]) -> dict[str, bool]:
     return out
 
 
+def _prior_caps(key: str) -> dict[str, bool]:
+    """已有快照（进程内优先，其次持久化），用于合并部分探测结果。"""
+    cached = _CACHE.get(key)
+    if cached is not None:
+        return dict(cached[1])
+    saved = get_capability_cache().get(key)
+    if isinstance(saved, dict) and isinstance(saved.get("caps"), dict):
+        return {k: bool(v) for k, v in saved["caps"].items()}
+    return {}
+
+
 def probe_capabilities(
     host: str,
     port: int | None = None,
@@ -66,6 +77,10 @@ def probe_capabilities(
 
     结果按主机缓存 1 小时（进程内）；未命中时回看 config.json 的持久化缓存。
     ``port`` / ``timeout`` 缺省时取 config 默认值；``connection_factory`` 供测试注入假连接。
+
+    仅探测 ``features`` 子集时，结果**合并**进已有快照（不会用子集覆盖全量缓存）；
+    连接/握手失败时只在进程内缓存，**不写入** config.json（避免瞬时网络抖动被持久化为
+    "不支持"）。
     """
     from .transport.sync import TdxConnection as _Conn
 
@@ -88,9 +103,11 @@ def probe_capabilities(
 
     factory = connection_factory or (lambda: _Conn(host, port, timeout))
     conn: Any = None
+    connected = False
     try:
         conn = factory()
         conn.connect()
+        connected = True
         caps = _probe(conn, selected)
     except Exception:
         caps = {name: False for name in selected}
@@ -101,8 +118,10 @@ def probe_capabilities(
             except Exception:
                 pass
 
+    if connected:
+        caps = {**_prior_caps(key), **caps}
+        save_capability(key, caps)
     _CACHE[key] = (time.monotonic(), caps)
-    save_capability(key, caps)
     return caps
 
 
@@ -121,10 +140,13 @@ def select_host(
     """
     if not require:
         return None
-    probe = prober or (lambda h, p, t: probe_capabilities(h, p, t))
     wanted = set(require)
     for host, _latency in ranked[:limit]:
-        caps = probe(host, port, timeout)
+        caps = (
+            prober(host, port, timeout)
+            if prober is not None
+            else probe_capabilities(host, port, timeout, features=wanted)
+        )
         if all(caps.get(f) for f in wanted):
             return host
     return None

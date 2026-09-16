@@ -27,11 +27,14 @@
 import json
 import os
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-_SAVE_LOCK = threading.Lock()
+# 可重入：读-改-写（_mutate）与外层 _save 会嵌套获取同一把锁。
+_SAVE_LOCK = threading.RLock()
 
 _CONFIG_DIR = Path(os.environ.get("EASY_TDX_CONFIG_DIR", str(Path.home() / ".easy_tdx")))
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
@@ -173,6 +176,19 @@ def _save(data: dict[str, Any]) -> None:
         tmp.replace(_CONFIG_FILE)
 
 
+@contextmanager
+def _mutate() -> Iterator[dict[str, Any]]:
+    """原子的读-改-写：持锁期间加载配置，退出时写回。
+
+    避免并行连接时多个 `save_*`（best_host / best_ex_host / capabilities）
+    基于过期快照写回，互相覆盖或丢弃其它字段。
+    """
+    with _SAVE_LOCK:
+        data = _load()
+        yield data
+        _save(data)
+
+
 # ---------------------------------------------------------------------------
 # 公开 getter
 # ---------------------------------------------------------------------------
@@ -291,13 +307,12 @@ def get_capability_cache() -> dict[str, Any]:
 
 def save_capability(key: str, caps: dict[str, bool]) -> None:
     """把某服务器的能力探测结果持久化到 config.json（供后续启动直接选路）。"""
-    cfg = _load()
-    table = cfg.setdefault("capabilities", {})
-    if not isinstance(table, dict):
-        table = {}
-        cfg["capabilities"] = table
-    table[key] = {"ts": datetime.now().isoformat(), "caps": caps}
-    _save(cfg)
+    with _mutate() as cfg:
+        table = cfg.setdefault("capabilities", {})
+        if not isinstance(table, dict):
+            table = {}
+            cfg["capabilities"] = table
+        table[key] = {"ts": datetime.now().isoformat(), "caps": caps}
 
 
 def get_retry_delays() -> tuple[float, ...]:
@@ -324,41 +339,38 @@ def get_retry_delays() -> tuple[float, ...]:
 
 def save_best_host(host: str) -> None:
     """保存最佳主机到配置文件；首次写入时同时补全默认配置。"""
-    cfg = _load()
-    cfg["best_host"] = host
-    cfg["best_host_updated_at"] = datetime.now().isoformat()
-    if "known_hosts" not in cfg:
-        cfg["known_hosts"] = list(_FALLBACK_HOSTS)
-    if "calc_hosts" not in cfg:
-        cfg["calc_hosts"] = list(_FALLBACK_CALC_HOSTS)
-    if "mac_hosts" not in cfg:
-        cfg["mac_hosts"] = list(_FALLBACK_MAC_HOSTS)
-    if "port" not in cfg:
-        cfg["port"] = _FALLBACK_PORT
-    if "ex_hosts" not in cfg:
-        cfg["ex_hosts"] = list(_FALLBACK_EX_HOSTS)
-    if "mac_ex_hosts" not in cfg:
-        cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
-    _save(cfg)
+    with _mutate() as cfg:
+        cfg["best_host"] = host
+        cfg["best_host_updated_at"] = datetime.now().isoformat()
+        if "known_hosts" not in cfg:
+            cfg["known_hosts"] = list(_FALLBACK_HOSTS)
+        if "calc_hosts" not in cfg:
+            cfg["calc_hosts"] = list(_FALLBACK_CALC_HOSTS)
+        if "mac_hosts" not in cfg:
+            cfg["mac_hosts"] = list(_FALLBACK_MAC_HOSTS)
+        if "port" not in cfg:
+            cfg["port"] = _FALLBACK_PORT
+        if "ex_hosts" not in cfg:
+            cfg["ex_hosts"] = list(_FALLBACK_EX_HOSTS)
+        if "mac_ex_hosts" not in cfg:
+            cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
 
 
 def save_best_ex_host(host: str) -> None:
     """保存最佳扩展行情主机到配置文件。"""
-    cfg = _load()
-    cfg["best_ex_host"] = host
-    cfg["best_ex_host_updated_at"] = datetime.now().isoformat()
-    if "ex_hosts" not in cfg:
-        cfg["ex_hosts"] = list(_FALLBACK_EX_HOSTS)
-    if "mac_ex_hosts" not in cfg:
-        cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
-    _save(cfg)
+    with _mutate() as cfg:
+        cfg["best_ex_host"] = host
+        cfg["best_ex_host_updated_at"] = datetime.now().isoformat()
+        if "ex_hosts" not in cfg:
+            cfg["ex_hosts"] = list(_FALLBACK_EX_HOSTS)
+        if "mac_ex_hosts" not in cfg:
+            cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
 
 
 def save_best_mac_ex_host(host: str) -> None:
     """保存最佳 MAC 协议扩展行情主机到配置文件。"""
-    cfg = _load()
-    cfg["best_mac_ex_host"] = host
-    cfg["best_mac_ex_host_updated_at"] = datetime.now().isoformat()
-    if "mac_ex_hosts" not in cfg:
-        cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
-    _save(cfg)
+    with _mutate() as cfg:
+        cfg["best_mac_ex_host"] = host
+        cfg["best_mac_ex_host_updated_at"] = datetime.now().isoformat()
+        if "mac_ex_hosts" not in cfg:
+            cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)

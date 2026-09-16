@@ -303,3 +303,48 @@ def test_std_var_are_sample_and_stdp_varp_population() -> None:
     pd.testing.assert_series_equal(out["B"], close.rolling(5).std(ddof=0), check_names=False)
     pd.testing.assert_series_equal(out["C"], close.rolling(5).var(ddof=1), check_names=False)
     pd.testing.assert_series_equal(out["D"], close.rolling(5).var(ddof=0), check_names=False)
+
+
+def test_zero_period_means_cumulative() -> None:
+    """通达信语义：N=0 时 SUM/HHV/LLV/COUNT 从第一个有效值开始累计。"""
+    bars = _bars()
+    out = evaluate("S: SUM(CLOSE,0); H: HHV(HIGH,0); L: LLV(LOW,0); C: COUNT(CLOSE>11,0);", bars)
+    close = bars["close"]
+    assert out["S"].tolist() == pytest.approx(close.expanding().sum().tolist())
+    assert out["H"].tolist() == pytest.approx(bars["high"].expanding().max().tolist())
+    assert out["L"].tolist() == pytest.approx(bars["low"].expanding().min().tolist())
+    assert out["C"].iloc[-1] == float((close > 11).sum())
+
+
+def test_newly_added_functions() -> None:
+    """DIFF/AVEDEV/EVERY/EXIST/VALUEWHEN/FORCAST/LAST/BARSSINCEN/LONGCROSS/TOPRANGE/LOWRANGE/三角函数。"""
+    bars = _bars()
+    close = bars["close"]
+    out = evaluate(
+        "A: DIFF(CLOSE,1); B: AVEDEV(CLOSE,3); C: EVERY(CLOSE>REF(CLOSE,1),3); "
+        "D: EXIST(CLOSE>REF(CLOSE,1),3); E: VALUEWHEN(CLOSE>12,CLOSE); F: SIN(CLOSE);",
+        bars,
+    )
+    assert out["A"].tolist() == pytest.approx(close.diff().tolist(), nan_ok=True)
+    assert out["B"].iloc[-1] == pytest.approx(
+        float((close.iloc[-3:].abs() - 0).add(0).pipe(lambda s: s).mean()) * 0
+        + float((close.iloc[-3:] - close.iloc[-3:].mean()).abs().mean())
+    )
+    up = close > close.shift(1)
+    assert out["C"].tolist() == [float(x) for x in (up.rolling(3).sum() == 3)]
+    assert out["D"].tolist() == [float(x) for x in (up.rolling(3).sum() > 0)]
+    assert out["E"].iloc[-1] == pytest.approx(float(close.iloc[-1]))
+    assert out["F"].iloc[-1] == pytest.approx(np.sin(float(close.iloc[-1])))
+
+    out2 = evaluate(
+        "G: FORCAST(CLOSE,3); H: LAST(CLOSE>REF(CLOSE,1),2,1); "
+        "I: TOPRANGE(HIGH); J: LOWRANGE(LOW); K: LONGCROSS(MA(CLOSE,2),MA(CLOSE,3),2);",
+        bars,
+    )
+    # FORCAST 末值等于对最后 3 点做一次线性回归的端点预测
+    y = close.iloc[-3:].to_numpy(dtype=float)
+    assert out2["G"].iloc[-1] == pytest.approx(float(np.polyval(np.polyfit(range(3), y, 1), 2)))
+    assert set(out2["H"].dropna().unique()) <= {0.0, 1.0}
+    assert set(out2["I"].dropna().unique()) <= set(range(len(bars)))
+    assert set(out2["J"].dropna().unique()) <= set(range(len(bars)))
+    assert set(out2["K"].dropna().unique()) <= {0.0, 1.0}

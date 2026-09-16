@@ -141,7 +141,7 @@
 | 官方历史数据 | ✅ | `offline/official.py`（清单解析 + 断点续传）、`offline/htc.py`（.htc 容器/标的帧 + zlib 块） |
 | 历史逐笔全量 | ✅ | `get_history_transaction_all`（自动分页，实测可回溯多年） |
 | 交易日历 | ✅ | `TradingCalendar` + `get_trading_calendar` / `get_trading_days`（由指数日线构建，含节假日） |
-| 公式解释器 | ✅ | `derive/formula.py`：50+ 函数（含 ZIG/PEAK/BACKSET/SUMBARS/FILTER/OBV/ATR/DMI/SAR）+ `get_formula` |
+| 公式解释器 | ✅ | `derive/formula.py`：60+ 函数（含 ZIG/PEAK/BACKSET/SUMBARS/FILTER/OBV/ATR/DMI/SAR）+ `get_formula` |
 | 通用分页 | ✅ | `_paginate` / `_paginate_async`；`get_security_features_all` 等 `*_all` 方法 |
 | CLI 测试 | ✅ | `tests/unit/test_cli.py`（CliRunner + mock 连接，覆盖全部命令/解析/输出） |
 

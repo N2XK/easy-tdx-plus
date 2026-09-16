@@ -6,10 +6,13 @@
 - 运算符：`+ - * /`、比较 `< > <= >= = <>`、逻辑 `AND OR NOT`
 - 函数：REF MA EMA SMA SUM HHV LLV STD STDP COUNT CROSS ABS MAX MIN IF RSI BARSLAST
   BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
-  UPNDAY DOWNNDAY SLOPE VAR VARP DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
-  BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS TR ATR OBV PDI MDI ADX ADXR SAR
+  UPNDAY DOWNNDAY SLOPE VAR VARP DMA CONST SQRT POW LOG LN EXP SIN COS TAN
+  SIGN MOD INTPART ROUND BETWEEN DIFF AVEDEV EVERY EXIST VALUEWHEN FORCAST LAST
+  BARSSINCEN LONGCROSS TOPRANGE LOWRANGE
+  ZIG PEAK TROUGH PEAKBARS TROUGHBARS TR ATR OBV PDI MDI ADX ADXR SAR
   WMA MTM ROC DPO（及别名 IFF AVERAGE STDDEV；STD/VAR 为估算(样本)口径，
-  STDP/VARP/STDDEV 为总体口径，与通达信一致）
+  STDP/VARP/STDDEV 为总体口径，与通达信一致；SUM/HHV/LLV/COUNT/EVERY/EXIST 的 N=0
+  表示从首个有效值起累计）
 
 用法::
 
@@ -204,15 +207,24 @@ def _fn_sma(x: Any, n: Any, m: Any) -> pd.Series:
 
 
 def _fn_sum(x: Any, n: Any) -> pd.Series:
-    return _series(x, _INDEX["idx"]).rolling(int(n)).sum()
+    """N 周期求和；N<=0 表示从第一个有效值累计（通达信语义）。"""
+    s = _series(x, _INDEX["idx"])
+    k = int(n)
+    return s.expanding().sum() if k <= 0 else s.rolling(k).sum()
 
 
 def _fn_hhv(x: Any, n: Any) -> pd.Series:
-    return _series(x, _INDEX["idx"]).rolling(int(n)).max()
+    """N 周期最高；N<=0 表示从第一个有效值累计（通达信语义）。"""
+    s = _series(x, _INDEX["idx"])
+    k = int(n)
+    return s.expanding().max() if k <= 0 else s.rolling(k).max()
 
 
 def _fn_llv(x: Any, n: Any) -> pd.Series:
-    return _series(x, _INDEX["idx"]).rolling(int(n)).min()
+    """N 周期最低；N<=0 表示从第一个有效值累计（通达信语义）。"""
+    s = _series(x, _INDEX["idx"])
+    k = int(n)
+    return s.expanding().min() if k <= 0 else s.rolling(k).min()
 
 
 def _fn_std(x: Any, n: Any) -> pd.Series:
@@ -226,8 +238,11 @@ def _fn_stdp(x: Any, n: Any) -> pd.Series:
 
 
 def _fn_count(x: Any, n: Any) -> pd.Series:
+    """N 周期内满足条件的次数；N<=0 表示从第一个有效值累计。"""
     s = _series(x, _INDEX["idx"]).astype(float)
-    return (s > 0).rolling(int(n)).sum()
+    cond = (s > 0).astype(float)
+    k = int(n)
+    return cond.expanding().sum() if k <= 0 else cond.rolling(k).sum()
 
 
 def _fn_cross(a: Any, b: Any) -> pd.Series:
@@ -465,6 +480,121 @@ def _fn_round(x: Any, n: Any = 0) -> pd.Series:
 def _fn_between(x: Any, a: Any, b: Any) -> pd.Series:
     s = _series(x, _INDEX["idx"])
     return ((s >= _series(a, _INDEX["idx"])) & (s <= _series(b, _INDEX["idx"]))).astype("float64")
+
+
+def _fn_diff(x: Any, n: Any = 1) -> pd.Series:
+    """DIFF(S,N) = S - REF(S,N)。"""
+    return _series(x, _INDEX["idx"]) - _series(x, _INDEX["idx"]).shift(int(n))
+
+
+def _fn_avedev(x: Any, n: Any) -> pd.Series:
+    """N 周期平均绝对偏差（序列与其均值的绝对差的平均）。"""
+    return (
+        _series(x, _INDEX["idx"])
+        .rolling(int(n))
+        .apply(lambda a: float(np.abs(a - a.mean()).mean()), raw=True)
+    )
+
+
+def _fn_every(x: Any, n: Any) -> pd.Series:
+    """N 周期内是否始终满足条件；N<=0 表示从首个有效值起。"""
+    cond = (_series(x, _INDEX["idx"]).astype(float) > 0).astype(float)
+    k = int(n)
+    if k <= 0:
+        return (cond.expanding().sum() == cond.expanding().count()).astype("float64")
+    return (cond.rolling(k).sum() == k).astype("float64")
+
+
+def _fn_exist(x: Any, n: Any) -> pd.Series:
+    """N 周期内是否存在满足条件的周期；N<=0 表示从首个有效值起。"""
+    cond = (_series(x, _INDEX["idx"]).astype(float) > 0).astype(float)
+    k = int(n)
+    if k <= 0:
+        return (cond.expanding().sum() > 0).astype("float64")
+    return (cond.rolling(k).sum() > 0).astype("float64")
+
+
+def _fn_valuewhen(s: Any, x: Any) -> pd.Series:
+    """条件成立时取 X 的当前值，否则沿用最近一次成立时的值。"""
+    cond = _series(s, _INDEX["idx"]).astype(float) > 0
+    xv = _series(x, _INDEX["idx"])
+    out = pd.Series(np.where(cond, xv, np.nan), index=_INDEX["idx"])
+    return out.ffill()
+
+
+def _fn_forcast(x: Any, n: Any) -> pd.Series:
+    """N 周期线性回归的当期预测值（FORCAST）。"""
+    k = int(n)
+
+    def _fit(a: np.ndarray) -> float:
+        return float(np.polyval(np.polyfit(range(len(a)), a, deg=1), len(a) - 1))
+
+    return _series(x, _INDEX["idx"]).rolling(k).apply(_fit, raw=True)
+
+
+def _fn_last(s: Any, a: Any, b: Any) -> pd.Series:
+    """从前 A 日到前 B 日是否一直满足条件（LAST，要求 A>B>=0）。"""
+    cond = _series(s, _INDEX["idx"]).astype(float) > 0
+    aa, bb = int(a), int(b)
+    return (
+        cond.rolling(aa + 1).apply(lambda w: bool(np.all(w[::-1][bb:])), raw=True).astype("float64")
+    )
+
+
+def _fn_barssincen(s: Any, n: Any) -> pd.Series:
+    """N 周期内首次条件成立到当前的周期数（BARSSINCEN）。"""
+    cond = _series(s, _INDEX["idx"]).astype(float) > 0
+    k = int(n)
+
+    def _calc(a: np.ndarray) -> float:
+        idx = int(np.argmax(a))
+        return float(k - 1 - idx) if (idx or a[0]) else float("nan")
+
+    return cond.rolling(k).apply(_calc, raw=True)
+
+
+def _fn_longcross(a: Any, b: Any, n: Any) -> pd.Series:
+    """维持 N 周期后 S1 上穿 S2（LONGCROSS）。"""
+    sa = _series(a, _INDEX["idx"])
+    sb = _series(b, _INDEX["idx"])
+    held = _fn_last(sa < sb, n, 1)
+    return ((held > 0) & (sa > sb)).astype("float64")
+
+
+def _fn_toprange(x: Any) -> pd.Series:
+    """当前值是否为历史新高，以及是近多少周期内最高（TOPRANGE）。"""
+    arr = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    out = np.zeros(len(arr))
+    for i in range(1, len(arr)):
+        out[i] = np.argmin(np.flipud(arr[:i] < arr[i]))
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_lowrange(x: Any) -> pd.Series:
+    """当前值是否为历史新低，以及是近多少周期内最低（LOWRANGE）。"""
+    arr = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    out = np.zeros(len(arr))
+    for i in range(1, len(arr)):
+        out[i] = np.argmin(np.flipud(arr[:i] > arr[i]))
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_sin(x: Any) -> pd.Series:
+    return pd.Series(
+        np.sin(_series(x, _INDEX["idx"]).to_numpy(dtype="float64")), index=_INDEX["idx"]
+    )
+
+
+def _fn_cos(x: Any) -> pd.Series:
+    return pd.Series(
+        np.cos(_series(x, _INDEX["idx"]).to_numpy(dtype="float64")), index=_INDEX["idx"]
+    )
+
+
+def _fn_tan(x: Any) -> pd.Series:
+    return pd.Series(
+        np.tan(_series(x, _INDEX["idx"]).to_numpy(dtype="float64")), index=_INDEX["idx"]
+    )
 
 
 def _zigzag(vals: np.ndarray, pct: float) -> list[tuple[int, float, str]]:
@@ -739,6 +869,20 @@ _FUNCS: dict[str, Any] = {
     "INTPART": _fn_intpart,
     "ROUND": _fn_round,
     "BETWEEN": _fn_between,
+    "DIFF": _fn_diff,
+    "AVEDEV": _fn_avedev,
+    "EVERY": _fn_every,
+    "EXIST": _fn_exist,
+    "VALUEWHEN": _fn_valuewhen,
+    "FORCAST": _fn_forcast,
+    "LAST": _fn_last,
+    "BARSSINCEN": _fn_barssincen,
+    "LONGCROSS": _fn_longcross,
+    "TOPRANGE": _fn_toprange,
+    "LOWRANGE": _fn_lowrange,
+    "SIN": _fn_sin,
+    "COS": _fn_cos,
+    "TAN": _fn_tan,
     "ZIG": _fn_zig,
     "PEAK": _fn_peak,
     "TROUGH": _fn_trough,

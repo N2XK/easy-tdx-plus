@@ -25,6 +25,7 @@ from ..models.configdata import (
     TdxIndustryNode,
     TdxStat,
     TdxStat2,
+    TdxStockName,
     TdxStockPinyin,
     TdxXgsg,
     TdxZs,
@@ -498,6 +499,22 @@ def parse_positional(data: bytes, sep: str = _FIELD_SEP) -> list[list[str]]:
             continue
         rows.append(line.split(sep))
     return rows
+
+
+def parse_stock_names(data: bytes) -> list[TdxStockName]:
+    """解析 profile.dat → 股票名称/曾用名。
+
+    定长 64 字节记录：``[0x00][6 位代码 ASCII][0x00][GBK 名称][填充]``，
+    同一代码可有多条（历史更名序列）。
+    """
+    out: list[TdxStockName] = []
+    for off in range(0, len(data) - 64 + 1, 64):
+        rec = data[off : off + 64]
+        code = rec[1:7].decode("ascii", errors="replace")
+        name = rec[8:].split(b"\x00")[0].decode("gbk", errors="replace").strip()
+        if code.isdigit() and name:
+            out.append(TdxStockName(code=code, name=name))
+    return out
 
 
 def parse_tdx_holidays(data: bytes) -> dict[int, list[str]]:

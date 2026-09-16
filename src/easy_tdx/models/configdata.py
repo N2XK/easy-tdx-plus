@@ -203,6 +203,14 @@ class TdxBjMore:
 
 
 @dataclass
+class TdxStockName:
+    """股票名称/曾用名（来自 profile.dat，每记录 64 字节：代码 + GBK 名称）。"""
+
+    code: str
+    name: str
+
+
+@dataclass
 class TdxConcept:
     """港股/美股 个股 ↔ 概念/行业映射（来自 tdxhkag.cfg / tdxmgag.cfg）。"""
 

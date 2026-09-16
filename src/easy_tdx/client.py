@@ -37,6 +37,7 @@ from .codec.configdata import (
     parse_positional,
     parse_simple_pairs,
     parse_spblock,
+    parse_stock_names,
     parse_stock_pinyin,
     parse_tdx_adr,
     parse_tdx_ah_rate,
@@ -1220,6 +1221,10 @@ class TdxClient:
         """北交所股票补充（tdxbjmore.cfg）：market/code/type/name/flag。"""
         return _to_df(parse_bj_more(self._zhb_member("tdxbjmore.cfg")))
 
+    def get_stock_name_history(self) -> pd.DataFrame:
+        """股票名称/曾用名（profile.dat）：code / name（同一代码为更名序列，4912 条）。"""
+        return _to_df(parse_stock_names(self._zhb_member("profile.dat")))
+
     def get_hk_stock_concepts(self) -> pd.DataFrame:
         """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""
         return _to_df(parse_concept_map(self._zhb_member("tdxhkag.cfg")))
@@ -2325,6 +2330,10 @@ class AsyncTdxClient:
     async def get_bj_more(self) -> pd.DataFrame:
         """北交所股票补充（tdxbjmore.cfg）。"""
         return _to_df(parse_bj_more(await self._zhb_member_async("tdxbjmore.cfg")))
+
+    async def get_stock_name_history(self) -> pd.DataFrame:
+        """股票名称/曾用名（profile.dat）。"""
+        return _to_df(parse_stock_names(await self._zhb_member_async("profile.dat")))
 
     async def get_hk_stock_concepts(self) -> pd.DataFrame:
         """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""

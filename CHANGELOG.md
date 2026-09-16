@@ -32,7 +32,7 @@
   `get_brokers`（券商名录）、`get_tdx_zs3`/`get_tdx_dszs`（板块/指数定义）、`get_sb_index_names`、
   `get_hk_index_weights`、`get_csrc_industries`（证监会行业）、`get_index_names`、`get_stock_pinyin`、
   `get_code_name_table`、`get_bj_code_map`（北交所新旧代码）、`get_hk_stock_concepts`/`get_us_stock_concepts`、
-  `get_zhb_config`（通用 INI）。
+  `get_zhb_config`（通用 INI）、`get_stock_name_history`（**股票曾用名** profile.dat）、`get_bj_more`。
 - **历史财务**：`read_history_financial_df` 快路径；point-in-time 面板（`report_date`）。
 - **派生计算**：仿射复权因子与前后复权日线；基础日线（换手/市值等）；技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比）。
 - **公式解释器**（`easy_tdx.derive.formula`）：50+ 内置函数（REF/MA/EMA/SMA/SUM/HHV/LLV/STD/COUNT/CROSS/RSI/BARSLAST/

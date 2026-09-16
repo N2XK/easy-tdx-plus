@@ -18,6 +18,7 @@ from easy_tdx.codec.configdata import (
     parse_named_blocks,
     parse_positional,
     parse_simple_pairs,
+    parse_stock_names,
     parse_stock_pinyin,
     parse_tdx_adr,
     parse_tdx_ah_rate,
@@ -99,6 +100,19 @@ def test_parse_bj_more() -> None:
     out = parse_bj_more(_gbk("44|920000|2|安徽凤凰|1|\r\n44|920001|2|纬达光电|1|\r\n"))
     assert len(out) == 2
     assert (out[0].code, out[0].name, out[0].type, out[0].flag) == ("920000", "安徽凤凰", 2, 1)
+
+
+def test_parse_stock_names() -> None:
+    def rec(code: str, name: str) -> bytes:
+        return b"\x00" + code.encode() + b"\x00" + _gbk(name) + b"\x00" * (64 - 8 - len(_gbk(name)))
+
+    data = rec("000001", "深发展A") + rec("000001", "S深发展A") + rec("000002", "深万科A")
+    out = parse_stock_names(data)
+    assert [(x.code, x.name) for x in out] == [
+        ("000001", "深发展A"),
+        ("000001", "S深发展A"),
+        ("000002", "深万科A"),
+    ]
 
 
 def test_parse_ini() -> None:

@@ -14,7 +14,7 @@ from .._df import _to_df
 from ..codec.bitmap import Fields, PresetField
 from ..commands.base import BaseCommand
 from ..config import get_best_host, get_mac_hosts, get_port, get_timeout, save_best_host
-from ..exceptions import TdxConnectionError
+from ..exceptions import TdxCommandError, TdxConnectionError
 from ..transport.async_ import AsyncTdxConnection
 from ..transport.sync import TdxConnection, ping_mac_all
 
@@ -658,14 +658,18 @@ class MacClient:
         offset: int = 0,
         count: int = 128000,
     ) -> pd.DataFrame:
-        """获取 K 线数据偏移信息。
+        """获取分类代码表（0x124A，实为板块/分类指数代码表）。
+
+        返回列：``flag/code/name/tag``（如 ``395001 主板Ａ股 ZBAG``）。
+        小 ``count`` 时服务端只回显头部、不返回记录；``count`` 足够大
+        （如默认 128000）时返回整表。
 
         Args:
-            offset: 偏移量。
+            offset: 偏移量（通常 0）。
             count: 请求数量。
         """
-        info = self._execute(KlineOffsetCmd(offset, count))
-        return _to_df(info)
+        items = self._execute(KlineOffsetCmd(offset, count))
+        return _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
 
     # ------------------------------------------------------------------ #
     # 文件操作
@@ -702,15 +706,26 @@ class MacClient:
         filename: str,
         filesize: int = 0,
     ) -> bytearray:
-        """下载完整远程文件。
+        """下载完整远程文件（**注意：实测 0x1215/0x1217 已不可用**）。
+
+        免费主站对该接口返回 size=0/flag=1，无法获取数据；获取服务器文件请改用
+        标准协议 ``TdxClient.get_report_file``（0x06b9，实测可用）。
 
         Args:
             filename: 远程文件名。
             filesize: 预期文件大小（0 表示自动检测）。
+
+        Raises:
+            TdxCommandError: 无法确定文件大小（接口不可用或文件不存在）。
         """
         if filesize <= 0:
             meta = self._execute(FileListCmd(filename))
             filesize = meta.size
+        if filesize <= 0:
+            raise TdxCommandError(
+                f"无法通过 MAC 文件接口获取 {filename!r}（size=0）；"
+                "该接口在免费主站不可用，请改用 TdxClient.get_report_file"
+            )
 
         full_data = bytearray()
         chunk_size = 30000
@@ -1221,8 +1236,8 @@ class AsyncMacClient:
         offset: int = 0,
         count: int = 128000,
     ) -> pd.DataFrame:
-        info = await self._execute(KlineOffsetCmd(offset, count))
-        return _to_df(info)
+        items = await self._execute(KlineOffsetCmd(offset, count))
+        return _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
 
     # ------------------------------------------------------------------ #
     # 文件操作
@@ -1249,6 +1264,11 @@ class AsyncMacClient:
         if filesize <= 0:
             meta = await self._execute(FileListCmd(filename))
             filesize = meta.size
+        if filesize <= 0:
+            raise TdxCommandError(
+                f"无法通过 MAC 文件接口获取 {filename!r}（size=0）；"
+                "该接口在免费主站不可用，请改用 TdxClient.get_report_file"
+            )
 
         full_data = bytearray()
         chunk_size = 30000

@@ -20,7 +20,12 @@ def _to_float(value: object) -> float:
 
 
 class SymbolCapitalFlowCmd(BaseCommand[CapitalFlowData | None]):
-    """查询个股资金流向。
+    """查询个股资金流向（0x1218）。
+
+    响应为两段 JSON：今日 [主力买, 主力卖, 小单买, 小单卖] 与
+    5 日 [主力买, 主力卖, 超大单净, 大单净, 中单净, 小单净]。
+    模型无 5 日专用字段，故 ``large_net``/``mid_net`` 存放的是**5 日**大单/中单净额，
+    ``date`` 服务端未提供（留空）。语义按实测 JSON 推断，未完全确证。
 
     Parameters
     ----------

@@ -9,6 +9,9 @@ from ..._binary import require_bytes, unpack_from
 from ...codec.mac_frame import build_mac_request
 from ...commands.base import BaseCommand
 
+# 注意：实测 0x1215/0x1217 在免费 7709 主站与 MAC-EX(7727) 上均返回
+# size=0/flag=1、无数据。此接口目前不可用，获取服务器文件请改用标准协议
+# `TdxClient.get_report_file`（0x06b9）。
 _FILELIST_MSG_ID = 0x1215
 _FILEDL_MSG_ID = 0x1217
 
@@ -85,6 +88,7 @@ class FileDownloadCmd(BaseCommand[bytes]):
         return build_mac_request(_FILEDL_MSG_ID, body)
 
     def parse_response(self, body: bytes) -> bytes:
-        if len(body) < 8:
+        # 失败/无数据时服务端只回 8~9 字节头部（flag=1、size=0）；不返回垃圾字节
+        if len(body) <= 8:
             return b""
         return body[8:]

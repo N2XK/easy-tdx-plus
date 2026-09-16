@@ -209,8 +209,27 @@ class ServerSession:
 
 
 @dataclass(frozen=True)
+class CategoryCodeItem:
+    """分类代码表条目（0x124A）。
+
+    每行形如 ``flag + code(6) + name(GBK8) + 8B + tag(ASCII) + tail``，
+    记录的是通达信板块/分类指数代码（如 395001=主板Ａ股，tag=ZBAG）。
+    协议细节部分未完全确证，``raw`` 保留原始字节以便核对。
+    """
+
+    flag: int
+    code: str
+    name: str
+    tag: str
+    raw: bytes = field(default=b"", repr=False, compare=False)
+
+
 class KlineOffsetInfo:
-    """K线偏移信息。"""
+    """0x124A 响应头部信息（保留兼容）。
+
+    ``total``：服务端回显的请求 count（小 count 时无数据）；``returned``：随后的
+    分类代码记录条数。
+    """
 
     total: int
     returned: int

@@ -41,12 +41,13 @@ def test_mac_server_info_parse() -> None:
 
 
 def test_mac_kline_offset_parse() -> None:
+    """0x124A 现按分类代码表解析：头部 8 字节 + N×35 字节记录。"""
     from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
 
-    body = struct.pack(">I", 400000) + struct.pack("<I", 128)  # total 大端
-    info = KlineOffsetCmd().parse_response(body)
-    assert info.total == 400000 and info.returned == 128
-    assert KlineOffsetCmd().parse_response(b"\x00").total == 0
+    # 只有头部、未带记录 -> 空
+    body = struct.pack(">I", 400000) + struct.pack("<I", 0)
+    assert KlineOffsetCmd().parse_response(body) == []
+    assert KlineOffsetCmd().parse_response(b"\x00") == []
 
 
 # --------------------------------------------------------------------------- #
@@ -170,3 +171,64 @@ def test_mac_get_goods_list_delegates_to_mac_ex(monkeypatch) -> None:
     assert closed == [True]
     assert c._mac_ex is None
     assert mac_client  # 模块引用，避免未使用告警
+
+
+def test_category_code_table_parse() -> None:
+    """0x124A：解析分类代码表记录（实测 35 字节/条）。"""
+    import struct
+
+    from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
+
+    recs = [
+        b"\x00" + b"395001" + "主板Ａ股".encode("gbk") + b"\x00" * 8 + b"ZBAG" + b"\x00" * 8,
+        b"\x00" + b"395002" + "主板Ｂ股".encode("gbk") + b"\x00" * 8 + b"ZBGB" + b"\x00" * 8,
+        b"\x00" + b"395004" + "创业板".encode("gbk") + b"\x00" * 10 + b"CYB" + b"\x00" * 8,
+    ]
+    recs = [r[:35].ljust(35, b"\x00") for r in recs]
+    body = struct.pack("<II", 0, len(recs)) + b"".join(recs)
+    items = KlineOffsetCmd(0, 128000).parse_response(body)
+    assert [(i.code, i.name, i.tag) for i in items] == [
+        ("395001", "主板Ａ股", "ZBAG"),
+        ("395002", "主板Ｂ股", "ZBGB"),
+        ("395004", "创业板", "CYB"),
+    ]
+
+
+def test_category_code_table_small_count_returns_empty() -> None:
+    import struct
+
+    from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
+
+    # 实测小 count 只回显头部、无记录
+    body = struct.pack(">I", 5) + struct.pack("<I", 0)
+    assert KlineOffsetCmd(0, 5).parse_response(body) == []
+
+
+def test_file_download_failed_response_is_empty() -> None:
+    """0x1217 失败回包（仅 8~9 字节头）不得返回垃圾字节。"""
+    from easy_tdx.mac.commands.file_query import FileDownloadCmd
+
+    assert FileDownloadCmd("zhb.zip").parse_response(b"\x00" * 8) == b""
+    assert FileDownloadCmd("zhb.zip").parse_response(b"\x00" * 7) == b""
+    assert FileDownloadCmd("zhb.zip").parse_response(b"\x00" * 8 + b"PK\x03\x04") == b"PK\x03\x04"
+
+
+def test_download_file_raises_when_size_zero(monkeypatch) -> None:
+    """MAC 文件接口不可用时，download_file 应显式报错而非静默返回空。"""
+    import pytest
+
+    from easy_tdx.exceptions import TdxCommandError
+    from easy_tdx.mac.client import MacClient
+    from easy_tdx.mac.commands.file_query import FileListCmd
+
+    def fake_execute(self, cmd):  # noqa: ANN001
+        if isinstance(cmd, FileListCmd):
+            from easy_tdx.mac.commands.file_query import FileMeta
+
+            return FileMeta(offset=0, size=0, flag=1, hash="")
+        return b""
+
+    monkeypatch.setattr(MacClient, "_execute", fake_execute)
+    c = MacClient("127.0.0.1")
+    with pytest.raises(TdxCommandError):
+        c.download_file("zhb.zip")

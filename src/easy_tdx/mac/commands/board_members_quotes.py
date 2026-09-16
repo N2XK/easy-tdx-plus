@@ -7,7 +7,13 @@
 import struct
 
 from ..._binary import unpack_from
-from ...codec.bitmap import Fields, PresetField, build_bitmap, get_active_fields
+from ...codec.bitmap import (
+    FIELD_POSTPROCESS,
+    Fields,
+    PresetField,
+    build_bitmap,
+    get_active_fields,
+)
 from ...codec.mac_frame import build_mac_request
 from ...commands.base import BaseCommand
 from ..enums import FilterType, SortOrder, SortType
@@ -100,6 +106,9 @@ class BoardMembersQuotesCmd(BaseCommand[list[MacQuoteField]]):
                 if len(val_bytes) < 4:
                     break
                 (value,) = struct.unpack(fmt, val_bytes)
+                post_fn = FIELD_POSTPROCESS.get(field_bit.value)
+                if post_fn is not None:
+                    value = post_fn(value, market_raw)  # type: ignore[operator]
                 fields_dict[field_bit.field_name] = value
 
             results.append(

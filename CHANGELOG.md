@@ -64,6 +64,11 @@
 
 ### Fixed
 
+- **`get_kline_offset`(0x124A) 误解析**：此前只读 8 字节头部，丢弃了 500 条分类代码记录；
+  现正确解析为板块/分类指数代码表（`flag/code/name/tag`，如 `395001 主板Ａ股 ZBAG`）。
+- **MAC 文件接口静默失败**：实测 0x1215/0x1217 在 7709 与 MAC-EX(7727) 均返回 size=0/flag=1；
+  `download_file` 现显式抛 `TdxCommandError`（并指向标准协议 `get_report_file`），不再返回空字节。
+- **`board_members_quotes` 与 `symbol_quotes` 字段后处理不一致**：补齐 `FIELD_POSTPROCESS` 钩子。
 - **本地 .day 证券类型/系数**（`offline/daily_bar.py`，对齐 mootdx）：`SZ_BOND` 量系数 1.0→0.01（此前成交量放大 100 倍）；
   补全类型判定：深市基金 `18`、沪市科创板 `68`、沪市基金 `58`、沪市债券 `02/15-20`。
 - **扩展市场 .day 的 amount 字段**（`offline/ex_daily_bar.py`）：此前 `amount` 被错误赋成成交量；现取成交额字段（列表与 DataFrame 均修）。

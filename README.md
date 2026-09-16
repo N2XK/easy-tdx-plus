@@ -443,7 +443,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_auction(market, code)` | 集合竞价 |
 | `get_unusual(market, ...)` | 市场异动 |
 | `get_server_info()` | 服务器交易时段 |
-| `get_kline_offset(offset, count)` | K 线偏移信息 |
+| `get_kline_offset(offset, count)` | 分类代码表（0x124A，板块/分类指数代码） |
 | `get_goods_list(market, ...)` | 扩展市场商品列表 |
 
 ### MacExClient / AsyncMacExClient

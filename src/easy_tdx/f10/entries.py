@@ -34,5 +34,12 @@ ENTRY_VALUATION = "HQServ.hq_nlp_gpsj"
 ENTRY_ALT_SHARE_CAPITAL = "TdxSharePCCW.tdxf10_gg_gbjg"
 ENTRY_ALT_VALUATION_HISTORY = "TdxShareCW.ph_agf10_gzfx"
 ENTRY_ALT_HOT_TOPIC_OVERVIEW = "TdxSharePCCW.tdxf10_gg_rdtc"
+ENTRY_ALT_BALANCE_SHEET = "TdxShareCW.ph_agf10_cw_zcfzb"
+ENTRY_ALT_INCOME_STATEMENT = "TdxShareCW.ph_agf10_cw_lyb"
+ENTRY_ALT_CASHFLOW_STATEMENT = "TdxShareCW.ph_agf10_cw_xjllb"
+ENTRY_ALT_BUSINESS_COMPOSITION = "TdxShareCW.ph_agf10_jyfx"
+ENTRY_ALT_INDUSTRY_RANK = "TdxShareCW.ph_agf10_hypm"
+ENTRY_ALT_INSTITUTIONAL_DETAIL = "TdxSharePCCW.tdxf10_gg_gdyj_jgcgmx"
+ENTRY_ALT_INSTITUTIONAL_PRICE = "TdxShareCW.ph_agf10_gbgd_jgcc"
 
 MARKET_TO_ID = {"sz": 0, "sh": 1, "bj": 2}

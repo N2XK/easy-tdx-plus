@@ -17,8 +17,15 @@ c = AltF10Client(timeout=10)
 # 股本结构
 sc = c.share_capital_structure(CODE)
 print("股本结构行数:", len(sc.rows))
-for row in sc.rows[:3]:
-    print("  ", row)
+
+# 三大报表（数据在 tables[1]）
+for name, resp in (
+    ("资产负债表", c.balance_sheet(CODE)),
+    ("利润表", c.income_statement(CODE)),
+    ("现金流量表", c.cashflow_statement(CODE)),
+):
+    table = resp.result_sets[1] if len(resp.result_sets) > 1 else None
+    print(f"{name}: 期数={table.count if table else 0}")
 
 # 估值历史（近 1 年 PE）
 val = c.valuation_history(CODE, period="1Y", indicator="PE")
@@ -27,10 +34,11 @@ print("\n估值历史行数:", len(val.rows), "| 末行:", val.rows[-1] if val.r
 # 热点题材信息面概览
 topics = c.hot_topic_overview(CODE)
 print("\n题材概览行数:", len(topics.rows))
-for row in topics.rows[:3]:
-    print("  ", row.get("lmmc"), str(row.get("zynr"))[:40])
 
 # 运行结果（节选，随行情变化）:
 # 股本结构行数: 18
-# 估值历史行数: 242 | 末行: {...}
+# 资产负债表: 期数=24
+# 利润表: 期数=25
+# 现金流量表: 期数=25
+# 估值历史行数: 242
 # 题材概览行数: 24

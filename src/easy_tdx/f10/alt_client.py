@@ -16,7 +16,14 @@ from __future__ import annotations
 from .client import F10Client, _code6
 from .entries import (
     ALT_TQLEX_BASE_URL,
+    ENTRY_ALT_BALANCE_SHEET,
+    ENTRY_ALT_BUSINESS_COMPOSITION,
+    ENTRY_ALT_CASHFLOW_STATEMENT,
     ENTRY_ALT_HOT_TOPIC_OVERVIEW,
+    ENTRY_ALT_INCOME_STATEMENT,
+    ENTRY_ALT_INDUSTRY_RANK,
+    ENTRY_ALT_INSTITUTIONAL_DETAIL,
+    ENTRY_ALT_INSTITUTIONAL_PRICE,
     ENTRY_ALT_SHARE_CAPITAL,
     ENTRY_ALT_VALUATION_HISTORY,
 )
@@ -69,3 +76,60 @@ class AltF10Client(F10Client):
     def hot_topic_overview(self, code: str) -> F10Response:
         """热点题材信息面概览（``rdtc`` / ``xxmmg``）。"""
         return self.params(ENTRY_ALT_HOT_TOPIC_OVERVIEW, _code6(code), "xxmmg")
+
+    def balance_sheet(self, code: str) -> F10Response:
+        """资产负债表（``ph_agf10_cw_zcfzb``）；数据在 ``tables[1]``。"""
+        return self.params(ENTRY_ALT_BALANCE_SHEET, _code6(code))
+
+    def income_statement(self, code: str, *, single_quarter: bool = False) -> F10Response:
+        """利润表（``ph_agf10_cw_lyb``）；数据在 ``tables[1]``。
+
+        Args:
+            single_quarter: True 为单季度，False 为报告期累计。
+        """
+        tag = "00102" if single_quarter else "00101"
+        return self.params(ENTRY_ALT_INCOME_STATEMENT, tag, _code6(code))
+
+    def cashflow_statement(self, code: str, *, single_quarter: bool = False) -> F10Response:
+        """现金流量表（``ph_agf10_cw_xjllb``）；数据在 ``tables[1]``。"""
+        tag = "00102" if single_quarter else "00101"
+        return self.params(ENTRY_ALT_CASHFLOW_STATEMENT, tag, _code6(code))
+
+    def business_composition(self, code: str, report_date: str | None = None) -> F10Response:
+        """主营构成（``ph_agf10_jyfx``）。"""
+        return self.params(ENTRY_ALT_BUSINESS_COMPOSITION, "00202", _code6(code), report_date or "")
+
+    def industry_rank(
+        self, code: str, report_date: str = "", *, valuation: bool = False
+    ) -> F10Response:
+        """行业排名（``ph_agf10_hypm``）。
+
+        Args:
+            valuation: True 为行业估值排名（00105），False 为行业财务排名（00102）。
+        """
+        key = "00105" if valuation else "00102"
+        return self.params(ENTRY_ALT_INDUSTRY_RANK, key, _code6(code), report_date)
+
+    def institutional_holding_detail(
+        self, code: str, report_date: str = "", *, type_value: str = "99", page_size: int = 20
+    ) -> F10Response:
+        """机构持股明细（``gdyj_jgcgmx``）。
+
+        Params: ``[code, sortType, reportDate, typeValue, clickIndex, pageNo, pageSize]``。
+        """
+        return self.params(
+            ENTRY_ALT_INSTITUTIONAL_DETAIL,
+            _code6(code),
+            "0",
+            report_date,
+            str(type_value),
+            "1",
+            "1",
+            str(page_size),
+        )
+
+    def institutional_holding_price_compare(
+        self, code: str, *, query_key: str = "00101"
+    ) -> F10Response:
+        """机构持仓与股价对比（``ph_agf10_gbgd_jgcc``）。"""
+        return self.params(ENTRY_ALT_INSTITUTIONAL_PRICE, query_key, _code6(code), "0")

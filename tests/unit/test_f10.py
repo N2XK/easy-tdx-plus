@@ -157,6 +157,36 @@ def test_alt_f10_client_params() -> None:
     assert fake.calls[-1] == (ENTRY_ALT_HOT_TOPIC_OVERVIEW, {"Params": ["000001", "xxmmg"]})
 
 
+def test_alt_f10_financials_params() -> None:
+    from easy_tdx.f10 import AltF10Client
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    c = AltF10Client(transport=fake, empty_retries=0)
+
+    c.balance_sheet("600036")
+    assert fake.calls[-1][1]["Params"] == ["600036"]
+
+    c.income_statement("600036")
+    assert fake.calls[-1][1]["Params"] == ["00101", "600036"]
+    c.income_statement("600036", single_quarter=True)
+    assert fake.calls[-1][1]["Params"] == ["00102", "600036"]
+
+    c.cashflow_statement("600036")
+    assert fake.calls[-1][1]["Params"] == ["00101", "600036"]
+
+    c.business_composition("600519", "20241231")
+    assert fake.calls[-1][1]["Params"] == ["00202", "600519", "20241231"]
+
+    c.industry_rank("688318", "20250930", valuation=True)
+    assert fake.calls[-1][1]["Params"] == ["00105", "688318", "20250930"]
+
+    c.institutional_holding_detail("000001", "20241231")
+    assert fake.calls[-1][1]["Params"] == ["000001", "0", "20241231", "99", "1", "1", "20"]
+
+    c.institutional_holding_price_compare("000001")
+    assert fake.calls[-1][1]["Params"] == ["00101", "000001", "0"]
+
+
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)

@@ -16,7 +16,9 @@
 - **MAC 协议**：`get_stock_quotes_list`（自定义字段 + 自动分页）、服务端复权 K 线、竞价、异动、chart sampling。
 - **扩展市场**：`0x2422` 表格、`0x2455` 服务器信息、连接自动登录 `0x2454`、MAC 通道商品列表/报价/K线/逐笔。
 - **F10 额外网关**：`AltF10Client`（`tdxhub.icfqs.com:7615`）——`share_capital_structure`（股本结构）、
-  `valuation_history`（估值历史 PE/PB×1Y/3Y/5Y）、`hot_topic_overview`（题材信息面），均实测可用。
+  `valuation_history`（估值历史 PE/PB×1Y/3Y/5Y）、`hot_topic_overview`（题材信息面）、
+  `balance_sheet`/`income_statement`/`cashflow_statement`（三表）、`business_composition`（主营构成）、
+  `industry_rank`（行业排名）、`institutional_holding_detail`/`institutional_holding_price_compare`（机构持仓），均实测可用。
 - **F10 / ICFQS（7615 TQLEX）**：公司概况/财报/题材/公告/北向/估值/涨跌停榜；龙虎榜/游资/每日复盘/题材（含异步）；**十大股东 / 机构持股 / 流通股东趋势**。
 - **扩展命令**：`0x0452`(特殊涨跌停表)、`0x051a`(成交分布)、`0x051b`(分时副图)、`0x051c`(指数动量)、
   `0x051d`(指数概况)、`0x053f`(排行榜)、`0x0547`(加密行情)、`0x0fd1`(小走势图)。

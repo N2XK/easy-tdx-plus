@@ -23,6 +23,7 @@ asyncio 版本::
 from ._df import to_tuples
 from .client import AsyncTdxClient, TdxClient
 from .config import save_best_ex_host, save_best_host
+from .derive import add_indicators, boll, ema, kdj, ma, macd, rsi, volume_ratio
 from .downloader import Downloader
 from .ex.client import AsyncExTdxClient, ExTdxClient
 from .ex.mac_client import AsyncMacExClient, MacExClient
@@ -129,6 +130,15 @@ __all__ = [
     "is_fund",
     "check_bars",
     "validate_bars",
+    # 技术指标
+    "add_indicators",
+    "ma",
+    "ema",
+    "macd",
+    "kdj",
+    "boll",
+    "rsi",
+    "volume_ratio",
     "KNOWN_HOSTS",
     "CALC_HOSTS",
     "MAC_HOSTS",

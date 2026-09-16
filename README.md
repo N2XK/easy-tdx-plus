@@ -453,6 +453,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_fq_bars(market, code, mode, ...)` | 前复权（qfq）/ 后复权（hfq）日线 |
 | `get_basic_daily(market, code, ...)` | 前收盘 / 涨跌幅 / 换手率 / 市值 |
 | `get_stock_profile(stocks)` | 行情 + 股本 + 市值 + 换手 + 估值 汇总 |
+| `add_indicators(bars, ...)` | 技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比） |
 | `f10` 属性 | 7615 F10 客户端（`F10Client`） |
 
 ### 加工数据 / 派生计算 / F10
@@ -509,6 +510,18 @@ funds = c.get_fund_list(Market.SH)
 - `classify_fund` / `is_fund` / `get_fund_list`：基金识别。
 - `validate_bars` / `check_bars`：OHLC 关系 / 非有限值 / 负量校验。
 - `to_tuples`：dataclass → tuple 快速输出路径。
+
+### 技术指标
+
+纯计算（口径对齐通达信），无额外数据源：
+
+```python
+from easy_tdx import add_indicators, macd, kdj, boll, rsi, ma
+
+df = add_indicators(bars, ma_periods=[5, 20], rsi_periods=[6, 12])
+# 追加列：ma*, dif/dea/macd, k/d/j, boll_upper/mid/lower, rsi*, volume_ratio
+macd(bars["close"]); kdj(bars["high"], bars["low"], bars["close"]); boll(bars["close"])
+```
 
 ### 龙虎榜 / 游资 / 每日复盘 / 题材（ICFQS 7615）
 

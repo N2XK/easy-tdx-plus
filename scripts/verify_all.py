@@ -188,8 +188,7 @@ def run_standard() -> None:
 
 
 def run_mac() -> None:
-    from easy_tdx import Market
-    from easy_tdx import Category
+    from easy_tdx import Category, Market
     from easy_tdx.mac.client import MacClient
 
     c = _try_client(lambda: MacClient.from_best_host(timeout=10))

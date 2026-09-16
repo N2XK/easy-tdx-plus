@@ -274,3 +274,20 @@ def test_sar_structural() -> None:
     s = out["S"]
     assert s.iloc[0] == bars["low"].iloc[0]
     assert s.iloc[1:].notna().all()
+
+
+def test_wma_mtm_roc_dpo() -> None:
+    bars = _long_bars()
+    out = evaluate("W: WMA(CLOSE,3); M: MTM(CLOSE,2); R: ROC(CLOSE,2); D: DPO(CLOSE,4);", bars)
+    close = bars["close"]
+    w = close.rolling(3).apply(lambda x: (x * [1, 2, 3]).sum() / 6.0, raw=True)
+    pd.testing.assert_series_equal(out["W"], w, check_names=False)
+    pd.testing.assert_series_equal(out["M"], close - close.shift(2), check_names=False)
+    expect_r = (close / close.shift(2) - 1) * 100
+    pd.testing.assert_series_equal(
+        out["R"].dropna().reset_index(drop=True),
+        expect_r.dropna().reset_index(drop=True),
+        check_names=False,
+    )
+    ma = close.rolling(4).mean()
+    pd.testing.assert_series_equal(out["D"], close - ma.shift(3), check_names=False)

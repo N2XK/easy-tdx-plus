@@ -8,7 +8,7 @@
   BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
   UPNDAY DOWNNDAY SLOPE VAR DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
   BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS TR ATR OBV PDI MDI ADX ADXR SAR
-  （及别名 IFF AVERAGE STDDEV）
+  WMA MTM ROC DPO（及别名 IFF AVERAGE STDDEV）
 
 用法::
 
@@ -553,6 +553,38 @@ def _fn_troughbars(x: Any, n: Any, m: Any = 1) -> pd.Series:
     return _swing_series(x, n, m, "L", bars=True)
 
 
+def _fn_wma(x: Any, n: Any) -> pd.Series:
+    """加权移动平均：权重 1..N（近端权重最大）。"""
+    n = int(n)
+    weights = np.arange(1, n + 1, dtype="float64")
+    denom = weights.sum()
+    return (
+        _series(x, _INDEX["idx"])
+        .rolling(n)
+        .apply(lambda w: float((np.asarray(w) * weights).sum() / denom), raw=True)
+    )
+
+
+def _fn_mtm(x: Any, n: Any) -> pd.Series:
+    """动量：MTM = X - REF(X, N)。"""
+    s = _series(x, _INDEX["idx"])
+    return s - s.shift(int(n))
+
+
+def _fn_roc(x: Any, n: Any) -> pd.Series:
+    """变动率：ROC = (X / REF(X, N) - 1) * 100。"""
+    s = _series(x, _INDEX["idx"])
+    ref = s.shift(int(n))
+    return (s / ref.replace(0, pd.NA) - 1) * 100
+
+
+def _fn_dpo(x: Any, n: Any) -> pd.Series:
+    """区间震荡线：DPO = X - REF(MA(X, N), N/2 + 1)。"""
+    n = int(n)
+    ma = _series(x, _INDEX["idx"]).rolling(n).mean()
+    return _series(x, _INDEX["idx"]) - ma.shift(n // 2 + 1)
+
+
 def _need(name: str) -> pd.Series:
     """取当前求值环境的行情列（供无参指标函数使用）。"""
     if name in _ENV:
@@ -706,6 +738,10 @@ _FUNCS: dict[str, Any] = {
     "ADX": _fn_adx,
     "ADXR": _fn_adxr,
     "SAR": _fn_sar,
+    "WMA": _fn_wma,
+    "MTM": _fn_mtm,
+    "ROC": _fn_roc,
+    "DPO": _fn_dpo,
     # 别名
     "IFF": _fn_if,
     "AVERAGE": _fn_ma,

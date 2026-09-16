@@ -655,6 +655,8 @@ XMTDX_LIVE=1 python -m pytest tests/integration/ -v        # 集成测试
 mypy src/                                                    # 类型检查（strict）
 ruff check src/ tests/ examples/                            # lint
 ruff format --check src/ tests/ examples/                   # format check
+python benchmarks/bench.py                                  # 性能基准（离线）
+python benchmarks/bench.py --live                           # 追加联网基准
 ```
 
 ## 致谢

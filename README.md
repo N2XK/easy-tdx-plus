@@ -173,6 +173,20 @@ with MacClient.from_best_host() as c:
 | `UnifiedTdxClient` / `AsyncUnifiedTdxClient` | 自动 | A 股 + 扩展市场统一入口 |
 | `TdxClient` / `AsyncTdxClient` | 7709 | A 股行情（标准协议） |
 
+**按能力选服务器 / 探测**：不同服务器支持的命令不同。可指定所需能力，直接从低延迟主机里
+选一台**支持全部所需命令**的，避免"先失败再回退"：
+
+```python
+# 直接选到支持 K 线/逐笔/财务的服务器
+with TdxClient.from_best_host(require=["kline", "transaction", "finance"]) as c:
+    ...
+
+TdxClient.probe_capabilities("59.36.5.11")   # {'quotes': True, 'kline': True, ...}
+c.get_capabilities()                          # 当前主机能力（缓存 1h + 持久化）
+```
+
+CLI 亦可：`easy-tdx caps --table`、`easy-tdx ping --caps`。
+
 ### MAC 协议（推荐）
 
 #### 报价
@@ -446,12 +460,14 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_security_count(market)` | 市场证券总数 |
 | `get_security_list(market, start)` | 证券列表（分页） |
 | `get_security_list_all()` | 沪深 A 股完整列表（含行业） |
+| `get_fund_list(market)` | 基金列表（ETF/LOF/REITs/分级/债券） |
 | `get_security_quotes(stocks)` | 批量五档行情 |
 | `get_security_bars(market, code, ...)` | 个股 K 线 |
 | `get_index_bars(market, code, ...)` | 指数 K 线 |
 | `get_bars(market, code, ...)` | K 线（按代码自动路由股票/指数） |
 | `get_bars_range(market, code, start_date, end_date, ...)` | 日期区间 K 线（自动分页、升序去重） |
 | `get_k_data(code, start_date, end_date, ...)` | 便捷日 K（自动推断市场，兼容 pytdx） |
+| `get_trading_calendar(start, end)` / `get_trading_days(...)` | 交易日历 / 区间交易日 |
 | `get_minute_time_data(market, code)` | 今日分时 |
 | `get_history_minute_time_data(market, code, date)` | 历史某日分时 |
 | `get_recent_minute_time_data(market, code, days=5)` | 最近 N 个交易日分时 |
@@ -468,9 +484,11 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_company_info_content(...)` | 公司信息文本 |
 | `get_block_info(filename)` | 板块信息 |
 | `get_report_file(filename)` | 下载服务器文件 |
+| `get_financial_file_list()` / `get_financial_records(f)` / `download_financial_history(dir, start, end)` | 财报文件列表 / 解析 / 批量下载（gpcw）|
 | `get_market_stat()` | 全市场涨跌统计 |
 | `get_price_limits(market, code, name, pre_close)` | 涨跌停价 |
 | `get_security_features(start, count)` | 证券扩展特征（0x0452，特殊涨跌停限制表） |
+| `get_security_features_all()` | 全部扩展特征（自动分页） |
 | `get_quotes_encrypt(stocks)` | 加密批量五档（0x0547，≤100 只） |
 | `get_index_info(market, code)` | 指数概况（0x051d，涨跌家数/委托分布） |
 | `get_index_momentum(market, code)` | 指数动量（0x051c，累计序列） |
@@ -482,6 +500,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_spblock()` | 大型指数成分（中证2000 等） |
 | `get_tdx_zs()` / `get_tdx_bk()` | 板块指数代码 / 简称↔全称 |
 | `get_tdx_hy()` | 行业归属（通达信 + 申万） |
+| `get_ah_rates` / `get_adr_list` / `get_industry_chain` / `get_named_blocks` / `get_tdx_holidays` / `get_brokers` / `get_csrc_industries` / `get_index_names` / `get_stock_pinyin` / `get_code_name_table` / `get_stock_name_history` / `get_bj_code_map` / `get_hk_stock_concepts` / `get_us_stock_concepts` / `get_zhb_config` | zhb.zip 配置类数据（数值口径见数据字典） |
 | `get_adjust_factors(market, code, ...)` | 仿射复权系数（对齐通达信） |
 | `get_fq_bars(market, code, mode, ...)` | 前复权（qfq）/ 后复权（hfq）日线 |
 | `get_basic_daily(market, code, ...)` | 前收盘 / 涨跌幅 / 换手率 / 市值 |
@@ -489,6 +508,7 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `add_indicators(bars, ...)` | 技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比） |
 | `evaluate(formula, bars)` / `get_formula(...)` | 通达信公式解释器（指标/选股子集） |
 | `f10` 属性 | 7615 F10 客户端（`F10Client`） |
+| `get_capabilities(host=None)` | 服务器分项能力探测（见「连接管理」） |
 
 ### 加工数据 / 派生计算 / F10
 
@@ -509,12 +529,33 @@ topics = f10.hot_topics("600519").rows           # 热点题材
 notices = f10.announcements("600519").rows       # 公告
 ```
 
-F10 覆盖 20+ Entry：公司概况、财务报表、主营构成、分红融资、增发获配、个股总评、
+F10 覆盖 **40+ Entry**：公司概况、财务报表、主营构成、分红融资、增发获配、个股总评、
 盈利预测、估值、题材行情、热点题材、题材内对比、公司资讯、北向持股、股东增减持、
+**十大股东 / 十大流通股东 / 机构持股（汇总·明细·对比·报告期）/ 股东人数 / 股东人数排名**、
 排名、治理、详情、公告/新闻/路演、涨跌停榜。未封装的 Entry 可用
 `F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`。
 
-更多示例见 [`examples/`](examples/)，**数据字典见 [`docs/数据字典.md`](docs/数据字典.md)**，补全方案见 [`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)，验证结果见 [`docs/验证报告.md`](docs/验证报告.md)。
+**AltF10Client**（`tdxhub.icfqs.com` 网关，额外入口）：`share_capital_structure`（股本结构）、
+`valuation_history`（估值历史）、`balance_sheet`/`income_statement`/`cashflow_statement`（三表）、
+`business_composition`、`industry_rank`、`research_consensus`（研报一致预期）、`theme_boards`、
+`company_events`、`industry_chain`、`industry_valuation`（行业估值对比）、`dragon_tiger_list`（龙虎榜）、
+`dividend_overview`/`dividend_viewer`、`northbound_funds`（北向）、`institutional_holding_detail` 等。
+
+```python
+from easy_tdx import AltF10Client
+alt = AltF10Client()
+bs = alt.balance_sheet("600519")        # 资产负债表（数据在 resp.tables[1]）
+pe = alt.valuation_history("600519", period="1Y", indicator="PE")
+```
+
+**配置类数据（zhb.zip）**：`get_ah_rates`（A/H 对照）、`get_adr_list`、`get_industry_chain`（产业链）、
+`get_named_blocks(file)`（基金/美股/港股/中证/英股/新交所/三板板块）、`get_tdx_holidays`（1991 至今节假日）、
+`get_brokers`（券商名录）、`get_csrc_industries`（证监会行业）、`get_index_names`、`get_stock_pinyin`、
+`get_code_name_table`、`get_stock_name_history`（**股票曾用名**）、`get_bj_code_map`、`get_zhb_config` 等。
+
+更多示例见 [`examples/`](examples/)，**数据字典见 [`docs/数据字典.md`](docs/数据字典.md)**，能力总览见
+[`docs/通达信数据能力总览.md`](docs/通达信数据能力总览.md)，补全方案见
+[`docs/ROADMAP_补全方案.md`](docs/ROADMAP_补全方案.md)，验证结果见 [`docs/验证报告.md`](docs/验证报告.md)。
 
 ### 并发 / 下载 / 限流 / 基金 / 校验
 
@@ -525,9 +566,22 @@ from easy_tdx import ParallelTdx, Downloader, RateLimiter, Market, TdxClient
 with ParallelTdx(connections=4) as pool:
     results = pool.map(lambda c, it: (it[1], len(c.get_security_bars(it[0], it[1], ...))), codes)
 
-# 批量下载（增量 + 断点续传；每只一个文件 + _manifest.json）
+# 批量下载（增量 + 断点续传；每只一个文件 + _manifest.json / _coverage.json）
 dl = Downloader("./data", connections=4)
 dl.download_daily([(Market.SH, "600519"), (Market.SZ, "000001")], fmt="csv")
+from easy_tdx import TradingCalendar
+cal = TradingCalendar.from_weekdays(20240101, 20241231)   # 或用 c.get_trading_calendar(...)
+report = dl.verify_coverage(stocks, trading_days=cal.as_ints())  # 查中间缺口
+dl.backfill_gaps(stocks, trading_days=cal.as_ints())             # 补拉缺口区间
+
+# 高并发取数：连接池(mode="pool") 或 每请求独立连接(mode="direct"，高并发更稳)
+with ParallelTdx(connections=8, mode="direct") as pool:
+    pool.map(lambda c, it: c.get_security_quotes([it]), codes)
+
+# 季度历史财务（gpcw）：批量下载 + point-in-time 面板
+c.download_financial_history("./gpcw", 20230101, 20241231)
+from easy_tdx.offline import read_financial_history_panel
+panel = read_financial_history_panel("./gpcw", codes=["000001"])
 
 # 交易时段自适应限流（盘中 15 / 盘后 30 / 休市 60 req/s）
 with TdxClient(rate_limit=True) as c:
@@ -538,7 +592,7 @@ with TdxClient(rate_limit=True) as c:
 funds = c.get_fund_list(Market.SH)
 ```
 
-- `ParallelTdx`：N 连接并发，队列借用、互相隔离。
+- `ParallelTdx`：并发取数；`mode="pool"`（复用连接）/ `mode="direct"`（每请求独立连接，高并发更稳）。
 - `Downloader`：按代码落盘 + `_manifest.json` 增量/续传，`fmt="csv"|"parquet"`；`_coverage.json` 记录覆盖区间，
   `verify_coverage(stocks, trading_days)` 查缺口、`backfill_gaps(...)` 补拉缺口区间；同键以新数据为准。
 - `RateLimiter` / `detect_phase`：交易时段自适应限流。

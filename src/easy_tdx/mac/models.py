@@ -167,21 +167,34 @@ class UnusualItem:
 
 @dataclass(frozen=True)
 class CapitalFlowData:
-    """资金流向数据。"""
+    """资金流向数据（0x1218 head=2, Query=Stock_ZJLX）。
+
+    字段口径与 gotdx ``mac_capital_flow.go`` 一致：
+
+    - **今日**：``[主力买, 主力卖, 散户买, 散户卖]`` → ``main_*`` / ``small_*``
+    - **近 5 日**：``[主力买, 主力卖, 超大单净, 大单净, 中单净, 小单净]``
+      → ``main_buy_5d`` / ``main_sell_5d`` / ``super_large_net_5d`` /
+      ``large_net_5d`` / ``medium_net_5d`` / ``small_net_5d``
+
+    ``date`` 服务端未提供，留空。
+    """
 
     date: str
+    # 今日
     main_in: float = 0.0
     main_out: float = 0.0
     main_net: float = 0.0
     small_in: float = 0.0
     small_out: float = 0.0
     small_net: float = 0.0
-    mid_in: float = 0.0
-    mid_out: float = 0.0
-    mid_net: float = 0.0
-    large_in: float = 0.0
-    large_out: float = 0.0
-    large_net: float = 0.0
+    # 近 5 日
+    main_buy_5d: float = 0.0
+    main_sell_5d: float = 0.0
+    main_net_5d: float = 0.0
+    super_large_net_5d: float = 0.0
+    large_net_5d: float = 0.0
+    medium_net_5d: float = 0.0
+    small_net_5d: float = 0.0
 
 
 @dataclass(frozen=True)

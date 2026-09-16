@@ -1,11 +1,14 @@
-"""分类代码表命令（0x124A）。
+"""K线偏移/分类代码表命令（0x124A）。
 
-实测响应：头部 8 字节 + N 条 35 字节记录，记录形如
-``flag(1) + code(6,ASCII) + name(8,GBK) + 8B + tag(ASCII) + tail``，
-内容为通达信板块/分类指数代码表（395001=主板Ａ股/tag=ZBAG 等）。
+协议（对齐 gotdx ``mac_kline_offset.go``，走 EX 帧）：
+请求 ``offset(u32)+count(u32)+5x``；响应头部 ``Total(大端 u32)+Returned(小端 u32)``。
 
-注：小 count（如 5/100）时服务端只回显头部、不带记录；大 count 才返回整表。
-协议细节部分未完全确证，记录保留 ``raw`` 供核对。
+实测：小 count（5/100）只回头部、无记录；``count=128000`` 时随后跟
+``Returned`` 条 35 字节记录，形如
+``flag(1)+code(6,ASCII)+name(8,GBK)+8B+tag(4,ASCII)+tail(8)``，
+内容是板块/分类指数代码表（395001=主板Ａ股/tag=ZBAG），每行的 tail 为
+偏移/标志元数据（语义未确证，保留 ``raw``）。头部 Total/Returned 可从
+返回表 ``df.attrs`` 获取。
 """
 
 import struct
@@ -32,6 +35,8 @@ class KlineOffsetCmd(BaseCommand[list[CategoryCodeItem]]):
     def __init__(self, offset: int = 0, count: int = 128000) -> None:
         self._offset = offset
         self._count = count
+        self.total: int = 0
+        self.returned: int = 0
 
     def build_request(self) -> bytes:
         # I:offset, I:count, 5 bytes padding
@@ -41,7 +46,9 @@ class KlineOffsetCmd(BaseCommand[list[CategoryCodeItem]]):
     def parse_response(self, body: bytes) -> list[CategoryCodeItem]:
         if len(body) < 8:
             return []
+        (self.total,) = unpack_from(">I", body, 0, "kline offset total")
         (returned,) = unpack_from("<I", body, 4, "category code count")
+        self.returned = int(returned)
         data = body[8:]
         n = min(int(returned), len(data) // _RECORD_SIZE)
         items: list[CategoryCodeItem] = []

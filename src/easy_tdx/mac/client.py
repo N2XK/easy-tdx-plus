@@ -658,18 +658,23 @@ class MacClient:
         offset: int = 0,
         count: int = 128000,
     ) -> pd.DataFrame:
-        """获取分类代码表（0x124A，实为板块/分类指数代码表）。
+        """获取分类代码表 / K 线偏移表（0x124A）。
 
-        返回列：``flag/code/name/tag``（如 ``395001 主板Ａ股 ZBAG``）。
-        小 ``count`` 时服务端只回显头部、不返回记录；``count`` 足够大
-        （如默认 128000）时返回整表。
+        返回列：``flag/code/name/tag``（如 ``395001 主板Ａ股 ZBAG``）；
+        协议头部 ``Total``（大端）/``Returned``（小端）见 ``df.attrs``。
+        小 ``count``（5/100）时服务端只回头部、无记录；``count`` 足够大
+        （默认 128000）时返回整表。
 
         Args:
             offset: 偏移量（通常 0）。
             count: 请求数量。
         """
-        items = self._execute(KlineOffsetCmd(offset, count))
-        return _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
+        cmd = KlineOffsetCmd(offset, count)
+        items = self._execute(cmd)
+        df = _to_df(items) if items else pd.DataFrame(columns=["flag", "code", "name", "tag"])
+        df.attrs["total"] = cmd.total
+        df.attrs["returned"] = cmd.returned
+        return df
 
     # ------------------------------------------------------------------ #
     # 文件操作

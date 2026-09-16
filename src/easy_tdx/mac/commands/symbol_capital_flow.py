@@ -20,12 +20,11 @@ def _to_float(value: object) -> float:
 
 
 class SymbolCapitalFlowCmd(BaseCommand[CapitalFlowData | None]):
-    """查询个股资金流向（0x1218）。
+    """查询个股资金流向（0x1218 head=2, Query=Stock_ZJLX）。
 
-    响应为两段 JSON：今日 [主力买, 主力卖, 小单买, 小单卖] 与
-    5 日 [主力买, 主力卖, 超大单净, 大单净, 中单净, 小单净]。
-    模型无 5 日专用字段，故 ``large_net``/``mid_net`` 存放的是**5 日**大单/中单净额，
-    ``date`` 服务端未提供（留空）。语义按实测 JSON 推断，未完全确证。
+    响应为两段 JSON（字段口径同 gotdx ``mac_capital_flow.go``）：
+    今日 ``[主力买, 主力卖, 散户买, 散户卖]``；
+    5 日 ``[主力买, 主力卖, 超大单净, 大单净, 中单净, 小单净]``。
 
     Parameters
     ----------
@@ -63,15 +62,15 @@ class SymbolCapitalFlowCmd(BaseCommand[CapitalFlowData | None]):
         today_data = python_list[0]
         five_days_data = python_list[1]
 
-        # today_data: [main_in, main_out, retail_in, retail_out]
-        # five_days_data: [buy_5d, sell_5d, super_large, large, mid, small]
-        main_in = _to_float(today_data[0]) if len(today_data) > 0 else 0.0
-        main_out = _to_float(today_data[1]) if len(today_data) > 1 else 0.0
-        retail_in = _to_float(today_data[2]) if len(today_data) > 2 else 0.0
-        retail_out = _to_float(today_data[3]) if len(today_data) > 3 else 0.0
+        def g(seq: list[object], i: int) -> float:
+            return _to_float(seq[i]) if len(seq) > i else 0.0
 
-        mid_net_5d = _to_float(five_days_data[4]) if len(five_days_data) > 4 else 0.0
-        large_net_5d = _to_float(five_days_data[3]) if len(five_days_data) > 3 else 0.0
+        # 今日: [主力买, 主力卖, 散户买, 散户卖]
+        main_in, main_out = g(today_data, 0), g(today_data, 1)
+        retail_in, retail_out = g(today_data, 2), g(today_data, 3)
+
+        # 5 日: [主力买, 主力卖, 超大单净, 大单净, 中单净, 小单净]
+        main_buy_5d, main_sell_5d = g(five_days_data, 0), g(five_days_data, 1)
 
         return CapitalFlowData(
             date="",
@@ -81,10 +80,11 @@ class SymbolCapitalFlowCmd(BaseCommand[CapitalFlowData | None]):
             small_in=retail_in,
             small_out=retail_out,
             small_net=retail_in - retail_out,
-            mid_in=0.0,
-            mid_out=0.0,
-            mid_net=mid_net_5d,
-            large_in=0.0,
-            large_out=0.0,
-            large_net=large_net_5d,
+            main_buy_5d=main_buy_5d,
+            main_sell_5d=main_sell_5d,
+            main_net_5d=main_buy_5d - main_sell_5d,
+            super_large_net_5d=g(five_days_data, 2),
+            large_net_5d=g(five_days_data, 3),
+            medium_net_5d=g(five_days_data, 4),
+            small_net_5d=g(five_days_data, 5),
         )

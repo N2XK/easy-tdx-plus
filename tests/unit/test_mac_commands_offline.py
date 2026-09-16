@@ -250,3 +250,54 @@ def test_coerce_date_and_query_date_int() -> None:
     for qd in (20260916, "20260916", date(2026, 9, 16)):
         req = SymbolTransactionCmd(1, "600519", query_date=qd).build_request()
         assert struct.pack("<I", 20260916) in req
+
+
+def test_capital_flow_field_mapping() -> None:
+    """0x1218：今日 4 值 + 5 日 6 值（口径同 gotdx）。"""
+    import json
+    import struct
+
+    from easy_tdx.mac.commands.symbol_capital_flow import SymbolCapitalFlowCmd
+
+    today = ["1209377792.00", "1379206784.00", "2098482304.00", "1928587136.00"]
+    five = [
+        "6430470144.00",
+        "7608551424.00",
+        "-626326144.00",
+        "-307912640.00",
+        "935576064.00",
+        "-1486445.00",
+    ]
+    body = (
+        struct.pack("<H12s5x8s", 1, b"Stock_ZJLX\x00\x00", b"") + json.dumps([today, five]).encode()
+    )
+    d = SymbolCapitalFlowCmd(1, "600519").parse_response(body)
+    assert d is not None
+    assert d.main_in == 1209377792.0 and d.main_out == 1379206784.0
+    assert d.small_in == 2098482304.0 and d.small_net == d.small_in - d.small_out
+    assert d.main_net_5d == 6430470144.0 - 7608551424.0
+    assert d.super_large_net_5d == -626326144.0
+    assert d.large_net_5d == -307912640.0
+    assert d.medium_net_5d == 935576064.0
+    assert d.small_net_5d == -1486445.0
+
+
+def test_kline_offset_headers_and_records() -> None:
+    """0x124A：Total 大端 / Returned 小端 + 35B 记录。"""
+    import struct
+
+    from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
+
+    rec = (b"\x00" + b"395001" + "主板Ａ股".encode("gbk") + b"\x00" * 8 + b"ZBAG" + b"\x00" * 8)[
+        :35
+    ].ljust(35, b"\x00")
+    body = struct.pack(">I", 7) + struct.pack("<I", 1) + rec
+    cmd = KlineOffsetCmd(0, 128000)
+    items = cmd.parse_response(body)
+    assert cmd.total == 7 and cmd.returned == 1
+    assert [(i.code, i.name, i.tag) for i in items] == [("395001", "主板Ａ股", "ZBAG")]
+
+    # 只有头部（无记录）
+    cmd2 = KlineOffsetCmd(0, 5)
+    assert cmd2.parse_response(struct.pack(">I", 5) + struct.pack("<I", 0)) == []
+    assert cmd2.total == 5 and cmd2.returned == 0

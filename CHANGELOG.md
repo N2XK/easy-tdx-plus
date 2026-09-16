@@ -64,6 +64,11 @@
 
 ### Fixed
 
+- **`get_capital_flow`(0x1218) 字段口径补全**（对齐 gotdx `mac_capital_flow.go`）：今日为
+  `[主力买,主力卖,散户买,散户卖]`，5 日为 `[主力买,主力卖,超大单净,大单净,中单净,小单净]`；
+  此前丢失超大/小单净额，且把 5 日值塞进"今日"字段。现模型分列 `*_5d`。
+- **`get_kline_offset`(0x124A) 头部恢复**：按 gotdx 定义解析 `Total(大端)/Returned(小端)` 并置于
+  `df.attrs`，同时保留解析出的分类代码记录。
 - **`query_date` 传 int/str 报 `AttributeError`**：MAC-EX `goods_transaction`/`goods_tick_chart` 现用
   `codec.datetime_.coerce_date` 归一化（支持 `date`/`YYYYMMDD`/字符串）。
 - **`get_company_info_content` 语义澄清**：签名为 `(market, code, filename, offset, length)`，

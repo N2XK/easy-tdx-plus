@@ -137,7 +137,7 @@
 | ICFQS 7615 | ✅ | `f10/icfqs.py` + `async_icfqs.py`：龙虎榜/游资/每日复盘/题材 |
 | 协议扩展命令 | ✅ | `0x051b` 分时副图、`0x0fd1` 小走势、`0x0452` 特征表、`0x051c` 指数动量、`0x051d` 指数概况、`0x053f` 排行榜、`0x051a` 成交分布、`0x0547` 加密行情 |
 | 扩展市场 | ✅ | `0x2455` 服务器信息、`0x2422` 表格、连接自动登录（`0x2454`） |
-| 全接口验证 | ✅ | `docs/验证报告.md`：145/145 通过（`scripts/verify_all.py`）；实时 p50 18ms、并发 98 req/s |
+| 全接口验证 | ✅ | `docs/验证报告.md`：164/164 通过（`scripts/verify_all.py`）；实时 p50 18ms、并发 98 req/s |
 | 官方历史数据 | ✅ | `offline/official.py`（清单解析 + 断点续传）、`offline/htc.py`（.htc 容器/标的帧 + zlib 块） |
 | 历史逐笔全量 | ✅ | `get_history_transaction_all`（自动分页，实测可回溯多年） |
 | 交易日历 | ✅ | `TradingCalendar` + `get_trading_calendar` / `get_trading_days`（由指数日线构建，含节假日） |

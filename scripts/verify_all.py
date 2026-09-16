@@ -268,6 +268,13 @@ def run_f10() -> None:
     check(g, "company_news", lambda: f.company_news(code))
     check(g, "ranking_detail", lambda: f.ranking_detail(code))
     check(g, "governance", lambda: f.governance(code))
+    check(g, "business_periods", lambda: f.business_periods(code))
+    check(g, "topic_ids", lambda: f.topic_ids(code))
+    check(g, "cache_list(gg)", lambda: f.cache_list(code, "gg"))
+    check(g, "cache_list(xw)", lambda: f.cache_list(code, "xw"))
+    check(g, "cache_list(ly)", lambda: f.cache_list(code, "ly"))
+    check(g, "detail", lambda: f.detail("1", "1"))
+    check(g, "topic_compare", lambda: f.topic_compare(code, "1104"))
 
     ga = "AltF10"
     a = AltF10Client(timeout=10)
@@ -319,6 +326,21 @@ def run_icfqs() -> None:
         lambda: c.lhb_yyb_detail("东方财富证券股份有限公司", "20260101", "20260915"),
     )
     check(g, "topic_rotation", lambda: c.topic_rotation())
+    check(g, "topic_list", lambda: c.topic_list())
+    check(g, "topics_new", lambda: c.topics_new())
+    check(g, "topics_events", lambda: c.topics_events())
+    check(g, "topics_top", lambda: c.topics_top(5))
+    check(g, "topic_search", lambda: c.topic_search("人工智能"))
+    check(g, "topic_detail", lambda: c.topic_detail("880754", "2"))
+    check(g, "topic_kline", lambda: c.topic_kline("880754", "2"))
+    check(g, "topic_stocks", lambda: c.topic_stocks("880754", "2"))
+    check(g, "topic_quotes", lambda: c.topic_quotes([("2", "880754")]))
+    check(g, "lhb_yz_detail", lambda: c.lhb_yz_detail("600519", "20260101", "20260915"))
+    check(
+        g,
+        "lhb_detail(有数据日)",
+        lambda: c.lhb_detail("000001", "20221129", "20221129"),
+    )
 
 
 def run_offline_derive() -> None:

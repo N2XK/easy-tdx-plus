@@ -106,6 +106,9 @@
 1. `shortline_indicators`：库内**不提供**，改为示例脚本 `examples/24_shortline/shortline_indicators.py`。
 2. T5 落库：需要引入 DuckDB/ClickHouse 依赖，超出"协议库"边界，建议作为独立项目（依赖 easy_tdx）。
 3. 7615 未封装的其余 Entry：可用 `F10Client.call(entry, params=[...])` 手动调用。
+4. `.htc` 分笔**记录级**解码：无公开规范、社区参考实现亦未完成，不发布猜测性解码器（历史逐笔改用 `get_history_transaction_all`）。
+5. Level-2 深度行情（逐笔委托/十档/撤单）：免费协议不提供。
+6. CLI 的 `f10` / `fund-flow`：已在 `--help` 注册但为占位，调用即报错。
 
 ## 工程优化（参考 tdxrs）
 
@@ -119,7 +122,8 @@
 | 响应语义校验 | ✅ | `validation.py`（`check_bars` / `validate_bars`）+ `TdxValidationError` |
 | 能力探测缓存 | ✅ | `_STD_CAPABILITY_CACHE`（进程内记忆） |
 | 离线解析向量化 | ✅ | `daily_bar` / `min_bar` / `ex_daily_bar` 改用 numpy 结构化解析，新增 `read_*_df` 快速路径（20 万条：旧 311ms → DataFrame 46ms，**≈7×**） |
-| CI | ✅ | `.github/workflows/ci.yml`（pytest 阻断；ruff/mypy 信息性） |
+| CI | ✅ | `.github/workflows/ci.yml`（pytest + coverage `fail_under=50` 阻断；`ruff`/`mypy` 阻断；py3.10/3.12/3.13） |
+| Live CI | ✅ | `.github/workflows/live.yml`（手动触发联网冒烟/集成） |
 | Rust 内核 | ❌ 不建议 | 违背纯 Python 定位；性能敏感用户可直接用 `tdxrs`（MIT） |
 
 > 设计原则：保持纯 Python、无额外运行时依赖（numpy/pandas 已是可选），
@@ -134,6 +138,12 @@
 | 协议扩展命令 | ✅ | `0x051b` 分时副图、`0x0fd1` 小走势、`0x0452` 特征表、`0x051c` 指数动量、`0x051d` 指数概况、`0x053f` 排行榜、`0x051a` 成交分布、`0x0547` 加密行情 |
 | 扩展市场 | ✅ | `0x2455` 服务器信息、`0x2422` 表格、连接自动登录（`0x2454`） |
 | 全接口验证 | ✅ | `docs/验证报告.md`：100/100 通过；实时 p50 18ms、并发 98 req/s |
+| 官方历史数据 | ✅ | `offline/official.py`（清单解析 + 断点续传）、`offline/htc.py`（.htc 容器/标的帧 + zlib 块） |
+| 历史逐笔全量 | ✅ | `get_history_transaction_all`（自动分页，实测可回溯多年） |
+| 交易日历 | ✅ | `TradingCalendar` + `get_trading_calendar` / `get_trading_days`（由指数日线构建，含节假日） |
+| 公式解释器 | ✅ | `derive/formula.py`：50+ 函数（含 ZIG/PEAK/BACKSET/SUMBARS/FILTER/OBV/ATR/DMI/SAR）+ `get_formula` |
+| 通用分页 | ✅ | `_paginate` / `_paginate_async`；`get_security_features_all` 等 `*_all` 方法 |
+| CLI 测试 | ✅ | `tests/unit/test_cli.py`（CliRunner + mock 连接，覆盖全部命令/解析/输出） |
 
 ## 文档索引
 
@@ -141,7 +151,9 @@
 | --- | --- |
 | [`README.md`](../README.md) | 安装、快速开始、功能与 API 概览 |
 | [`docs/数据字典.md`](数据字典.md) | 4 条通道 + 离线 + 派生 + 工具的方法/命令/字段/口径；附录含数据模型字段、枚举、异常、规则（推荐入口） |
+| [`docs/能力矩阵.md`](能力矩阵.md) | 各通道能力实测成熟度与限制速查 |
 | [`docs/验证报告.md`](验证报告.md) | 全接口实测与实时能力评估 |
 | [`docs/ROADMAP_补全方案.md`](ROADMAP_补全方案.md) | 本文件：方案与实施状态 |
+| [`CHANGELOG.md`](../CHANGELOG.md) | 变更日志 |
 | [`examples/`](../examples/) | 可运行示例 |
 

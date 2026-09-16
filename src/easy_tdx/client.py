@@ -63,6 +63,7 @@ from .config import (
     get_full_featured_hosts,
     get_known_hosts,
     get_port,
+    get_retry_delays,
     get_timeout,
     save_best_host,
 )
@@ -86,7 +87,6 @@ from .trading_calendar import TradingCalendar
 from .transport.async_ import AsyncTdxConnection
 from .transport.sync import TdxConnection, ping_all
 
-_RETRY_DELAYS = (0.1, 0.5, 1.0, 2.0)
 _T = TypeVar("_T")
 _SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 _DAILY_PLUS = frozenset(
@@ -344,12 +344,14 @@ class TdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
         rate_limit: bool = False,
+        retry_delays: tuple[float, ...] | None = None,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
         self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
+        self._retry_delays = retry_delays if retry_delays is not None else get_retry_delays()
         self._conn = TdxConnection(host, port, timeout)
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
@@ -483,11 +485,11 @@ class TdxClient:
         self._rate_acquire()
         try:
             return self._conn.execute(cmd)
-        except TdxConnectionError:
+        except TdxConnectionError as first_exc:
             if not self._auto_reconnect:
                 raise
-            last_exc: TdxConnectionError | None = None
-            for delay in _RETRY_DELAYS:
+            last_exc: TdxConnectionError = first_exc
+            for delay in self._retry_delays:
                 time.sleep(delay)
                 self._conn.close()
                 self._conn = TdxConnection(self._host, self._port, self._timeout)
@@ -498,7 +500,7 @@ class TdxClient:
                     return self._conn.execute(cmd)
                 except TdxConnectionError as e:
                     last_exc = e
-            raise last_exc  # type: ignore[misc]
+            raise last_exc
 
     def _switch_host(self, host: str) -> None:
         """将底层连接切换到指定主机，并持久化为最佳主机。"""
@@ -1443,12 +1445,14 @@ class AsyncTdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
         rate_limit: bool = False,
+        retry_delays: tuple[float, ...] | None = None,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
         self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
+        self._retry_delays = retry_delays if retry_delays is not None else get_retry_delays()
         self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
@@ -1568,11 +1572,11 @@ class AsyncTdxClient:
         async with self._execute_lock:
             try:
                 return await self._conn.execute(cmd)
-            except TdxConnectionError:
+            except TdxConnectionError as first_exc:
                 if not self._auto_reconnect:
                     raise
-                last_exc: TdxConnectionError | None = None
-                for delay in _RETRY_DELAYS:
+                last_exc: TdxConnectionError = first_exc
+                for delay in self._retry_delays:
                     await asyncio.sleep(delay)
                     await self._conn.close()
                     self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
@@ -1581,7 +1585,7 @@ class AsyncTdxClient:
                         return await self._conn.execute(cmd)
                     except TdxConnectionError as e:
                         last_exc = e
-                raise last_exc  # type: ignore[misc]
+                raise last_exc
 
     async def _switch_host(self, host: str) -> None:
         """将底层连接切换到指定主机，并持久化为最佳主机。"""

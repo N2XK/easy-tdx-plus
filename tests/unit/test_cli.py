@@ -144,7 +144,6 @@ def test_quote_list(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
         (["capital-flow", "SZ", "000001"], "get_capital_flow"),
         (["auction", "SZ", "000001"], "get_auction"),
         (["unusual", "SZ"], "get_unusual"),
-        (["market-stat"], "get_market_stat"),
         (["server-info"], "get_server_info"),
         (["symbol-info", "SZ", "000001"], "get_symbol_info"),
         (["tick", "SZ", "000001"], "get_tick_chart"),
@@ -156,6 +155,25 @@ def test_simple_commands(
 ) -> None:
     _patch(monkeypatch, _FakeClient(**{method: lambda *a, **k: _df()}))
     res = runner.invoke(cli, args)
+    assert res.exit_code == 0, res.output
+
+
+def test_market_stat(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Ctx:
+        def __enter__(self) -> object:
+            return self
+
+        def __exit__(self, *a: object) -> bool:
+            return False
+
+        def get_market_stat(self) -> pd.DataFrame:
+            return _df()
+
+    monkeypatch.setattr(
+        "easy_tdx.client.TdxClient.from_best_host",
+        classmethod(lambda cls, *a, **k: _Ctx()),
+    )
+    res = runner.invoke(cli, ["market-stat"])
     assert res.exit_code == 0, res.output
 
 

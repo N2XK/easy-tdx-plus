@@ -25,6 +25,7 @@
   运算符、变量赋值 `:`/`:=`、别名 IFF/AVERAGE/STDDEV。
 - **工程**：限流（交易时段自适应）、连接池 `ParallelTdx`、批量下载器 `Downloader`、K 线语义校验、
   通用分页 helper `_paginate`、基金识别、CLI（`easy-tdx`）。
+- **可配置重试**：`TdxClient(retry_delays=...)` / 环境变量 `EASY_TDX_RETRY_DELAYS` / config.json `retry_delays`。
 
 ### Changed
 

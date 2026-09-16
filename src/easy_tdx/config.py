@@ -20,6 +20,7 @@
     EASY_TDX_PORT        -- 端口
     EASY_TDX_TIMEOUT     -- 超时秒数
     EASY_TDX_KNOWN_HOSTS -- 逗号分隔的候选主机列表
+    EASY_TDX_RETRY_DELAYS-- 断线重试退避序列（逗号分隔秒数）
     EASY_TDX_CONFIG_DIR  -- 配置文件目录（默认 ~/.easy_tdx）
 """
 
@@ -142,6 +143,7 @@ _FALLBACK_MAC_EX_HOSTS: list[str] = [
 
 _FALLBACK_PORT = 7709
 _FALLBACK_TIMEOUT = 15.0
+_FALLBACK_RETRY_DELAYS: tuple[float, ...] = (0.1, 0.5, 1.0, 2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +275,23 @@ def get_timeout() -> float:
         return float(env)
     cfg = _load()
     return cast("float", cfg.get("timeout", _FALLBACK_TIMEOUT))
+
+
+def get_retry_delays() -> tuple[float, ...]:
+    """返回断线重试的退避序列（秒）。
+
+    优先级：环境变量 ``EASY_TDX_RETRY_DELAYS``（逗号分隔，如 "0.1,0.5,1"）
+    > config.json 的 ``retry_delays`` 数组 > 内嵌默认 ``(0.1, 0.5, 1.0, 2.0)``。
+    返回空元组表示不重试。
+    """
+    env = os.environ.get("EASY_TDX_RETRY_DELAYS")
+    if env is not None:
+        return tuple(float(x) for x in env.split(",") if x.strip())
+    cfg = _load()
+    value = cfg.get("retry_delays")
+    if isinstance(value, list):
+        return tuple(float(x) for x in value)
+    return _FALLBACK_RETRY_DELAYS
 
 
 # ---------------------------------------------------------------------------

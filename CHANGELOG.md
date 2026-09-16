@@ -71,6 +71,8 @@
 
 ### Removed
 
+- 移除 AI 工具相关文件：`.claude/`（含本地权限文件）、根目录 `CLAUDE.md`、及仅被其引用的 `scripts/ruff_hook.py`；
+  `.claude/` 已加入 `.gitignore`。
 - 清理误提交的下载产物与失效脚本；旧版 `api_reference.md` / `field_mapping.md` 合并进 `docs/数据字典.md`。
 
 ### Docs

@@ -15,6 +15,7 @@ htmlcov/
 venv/
 .omc/
 uv.lock
+.claude/
 
 # 示例运行时下载/解压产物
 examples/**/downloads/

@@ -41,11 +41,14 @@ from .commands.block_info import GetBlockInfoCmd, GetBlockInfoMetaCmd
 from .commands.company_info import GetCompanyInfoCategoryCmd, GetCompanyInfoContentCmd
 from .commands.finance_info import GetFinanceInfoCmd
 from .commands.fund_flow import GetHistoryFundFlowCmd
+from .commands.index_info import GetIndexInfoCmd
+from .commands.index_momentum import GetIndexMomentumCmd
 from .commands.minute_aux import GetMinuteAuxCmd, resolve_selector
 from .commands.minute_time import GetHistoryMinuteTimeDataCmd
 from .commands.report_file import GetReportFileCmd
 from .commands.security_bars import GetIndexBarsCmd, GetSecurityBarsCmd
 from .commands.security_count import GetSecurityCountCmd
+from .commands.security_feature import GetSecurityFeatureCmd
 from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.sparkline import GetSparklineCmd
@@ -67,6 +70,7 @@ from .fund import is_fund
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
 from .models.enums import KlineCategory, Market
+from .models.feature import IndexInfo
 from .models.finance import (
     FinancialFileInfo,
     FinancialRecord,
@@ -667,6 +671,19 @@ class TdxClient:
             )
         )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
+
+    def get_security_features(self, start: int = 0, count: int = 2000) -> pd.DataFrame:
+        """证券扩展特征（0x0452，特殊品种涨跌停限制表等）。"""
+        return _to_df(self._execute_std(GetSecurityFeatureCmd(start, count), require_nonempty=True))
+
+    def get_index_momentum(self, market: Market, code: str) -> pd.DataFrame:
+        """指数动量（0x051c，累计值序列）。"""
+        values = self._execute_std(GetIndexMomentumCmd(market, code), require_nonempty=True)
+        return pd.DataFrame({"momentum": values})
+
+    def get_index_info(self, market: Market, code: str) -> IndexInfo:
+        """指数概况（0x051d，含涨跌家数与委托分布）。"""
+        return self._execute_std(GetIndexInfoCmd(market, code))
 
     def get_bars(
         self,
@@ -1589,6 +1606,21 @@ class AsyncTdxClient:
             )
         )
         return _merge_bar_datetime(df, category in _DAILY_PLUS)
+
+    async def get_security_features(self, start: int = 0, count: int = 2000) -> pd.DataFrame:
+        """证券扩展特征（0x0452）异步版。"""
+        return _to_df(
+            await self._execute_std(GetSecurityFeatureCmd(start, count), require_nonempty=True)
+        )
+
+    async def get_index_momentum(self, market: Market, code: str) -> pd.DataFrame:
+        """指数动量（0x051c）异步版。"""
+        values = await self._execute_std(GetIndexMomentumCmd(market, code), require_nonempty=True)
+        return pd.DataFrame({"momentum": values})
+
+    async def get_index_info(self, market: Market, code: str) -> IndexInfo:
+        """指数概况（0x051d）异步版。"""
+        return await self._execute_std(GetIndexInfoCmd(market, code))
 
     async def get_bars(
         self,

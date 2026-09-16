@@ -432,7 +432,8 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_minute_aux(market, code, kind)` | 分时副图（买卖力道 / 成交对比，0x051b） |
 | `get_sparkline(market, code, selector, window)` | 小走势图（轻量价格序列，0x0fd1） |
 | `get_transaction_data(market, code, ...)` | 当日逐笔成交 |
-| `get_history_transaction_data(...)` | 历史逐笔成交 |
+| `get_history_transaction_data(...)` | 历史逐笔成交（分页） |
+| `get_history_transaction_all(...)` | 某历史日全部逐笔（自动分页，可回溯多年） |
 | `get_fund_flow(market, code)` | 当日资金流向 |
 | `get_history_fund_flow(market, code, ...)` | 历史资金流向 |
 | `get_xdxr_info(market, code)` | 除权除息历史 |

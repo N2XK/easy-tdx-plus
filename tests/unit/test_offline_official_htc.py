@@ -7,6 +7,7 @@ import zlib
 
 import pytest
 
+from easy_tdx.exceptions import TdxOfflineError
 from easy_tdx.offline import iter_htc, parse_downit_cfg, read_htc
 from easy_tdx.offline.official import OfficialChannel
 
@@ -81,3 +82,59 @@ def test_read_htc_filter(tmp_path) -> None:
     got = read_htc(p, codes=["600519"])
     assert set(got) == {"600519"}
     assert got["600519"].data == b"b"
+
+
+class _FakeResp:
+    def __init__(self, body: bytes, headers: dict, status: int = 200) -> None:
+        self._body = body
+        self.headers = headers
+        self.status = status
+        self._pos = 0
+
+    def read(self, n: int) -> bytes:
+        chunk = self._body[self._pos : self._pos + n]
+        self._pos += len(chunk)
+        return chunk
+
+    def __enter__(self) -> _FakeResp:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_download_rejects_truncated(tmp_path, monkeypatch) -> None:
+    from easy_tdx.offline import official
+
+    body = b"x" * 10
+    monkeypatch.setattr(
+        official, "_http_get", lambda *a, **k: _FakeResp(body, {"Content-Length": "99"})
+    )
+    dest = tmp_path / "gbbq.zip"
+    # 声明 99 字节但只给 10 字节 -> 断言不完整，且 .part 保留供续传
+    with pytest.raises(TdxOfflineError):
+        official.download_channel(official.OfficialChannel("01", 6, "x/", "gbbq.zip"), tmp_path)
+    assert not dest.exists()
+    assert (tmp_path / "gbbq.zip.part").exists()
+
+
+def test_download_accepts_complete(tmp_path, monkeypatch) -> None:
+    from easy_tdx.offline import official
+
+    body = b"hello"
+    monkeypatch.setattr(
+        official, "_http_get", lambda *a, **k: _FakeResp(body, {"Content-Length": str(len(body))})
+    )
+    official.download_channel(official.OfficialChannel("01", 6, "x/", "gbbq.zip"), tmp_path)
+    assert (tmp_path / "gbbq.zip").read_bytes() == body
+
+
+def test_download_resumes_partial(tmp_path, monkeypatch) -> None:
+    from easy_tdx.offline import official
+
+    (tmp_path / "gbbq.zip.part").write_bytes(b"abc")
+    body = b"defg"
+    resp = _FakeResp(body, {"Content-Range": "bytes 3-6/7"}, status=206)
+    monkeypatch.setattr(official, "_http_get", lambda *a, **k: resp)
+    official.download_channel(official.OfficialChannel("01", 6, "x/", "gbbq.zip"), tmp_path)
+    assert (tmp_path / "gbbq.zip").read_bytes() == b"abcdefg"

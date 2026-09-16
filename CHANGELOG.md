@@ -62,6 +62,8 @@
 
 ### Fixed
 
+- **官方下载完整性**：`offline.official._download` 此前未校验字节数，连接中断/截断的部分文件会被
+  `replace` 成"完整文件"；现按 `Content-Length`/`Content-Range` 校验，不足则保留 `.part` 供续传。
 - **能力缓存**：`probe_capabilities(features=subset)` 不再用子集**覆盖**全量快照（改为合并）；
   连接/握手失败仅在进程内缓存，**不写入** `config.json`，避免瞬时网络抖动被持久化为"不支持"达 1 小时。
 - **`config.json` 读-改-写竞争**：`save_best_host`/`save_best_ex_host`/`save_best_mac_ex_host`/`save_capability`

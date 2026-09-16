@@ -102,8 +102,26 @@ def fetch_manifest(
     return parse_downit_cfg(text)
 
 
+def _expected_total(resp: Any) -> int | None:
+    """从响应头推断文件总大小（200 的 Content-Length 或 206 的 Content-Range）。"""
+    status = getattr(resp, "status", 200)
+    if status == 206:
+        cr = resp.headers.get("Content-Range")  # 形如 "bytes start-end/total"
+        if cr and "/" in cr:
+            total = cr.rsplit("/", 1)[-1].strip()
+            if total.isdigit():
+                return int(total)
+        return None
+    length = resp.headers.get("Content-Length")
+    return int(length) if length and length.isdigit() else None
+
+
 def _download(url: str, dest: Path, timeout: float, resume: bool = True) -> Path:
-    """下载 url 到 dest（支持断点续传 + 原子替换）。"""
+    """下载 url 到 dest（支持断点续传 + 核对完整性 + 原子替换）。
+
+    若服务端给出总大小而实际字节数不足（连接中断/截断），保留 ``.part`` 供下次续传，
+    不把残缺文件提升为最终文件。
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     existing = tmp.stat().st_size if (resume and tmp.exists()) else 0
@@ -113,15 +131,21 @@ def _download(url: str, dest: Path, timeout: float, resume: bool = True) -> Path
             mode = "ab" if (existing and getattr(resp, "status", 200) == 206) else "wb"
             if mode == "wb":
                 existing = 0
+            total = _expected_total(resp)
             with open(tmp, mode) as f:
                 while True:
                     chunk = resp.read(1 << 20)
                     if not chunk:
                         break
                     f.write(chunk)
-        tmp.replace(dest)
     except Exception as e:  # noqa: BLE001
         raise TdxOfflineError(f"下载失败: {url}: {e}") from e
+    got = tmp.stat().st_size
+    if total is not None and got != total:
+        raise TdxOfflineError(
+            f"下载不完整: {url}: 期望 {total} 字节，实际 {got} 字节（已保留 {tmp.name} 供续传）"
+        )
+    tmp.replace(dest)
     return dest
 
 

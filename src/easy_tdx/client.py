@@ -52,7 +52,10 @@ from .commands.security_feature import GetSecurityFeatureCmd
 from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.sparkline import GetSparklineCmd
+from .commands.top_board import GetTopBoardCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
+from .commands.volume_profile import GetVolumeProfileCmd
+from .commands.xdxr_info import GetXdxrInfoCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
 from .config import (
     get_best_host,
@@ -70,7 +73,7 @@ from .fund import is_fund
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
 from .models.enums import KlineCategory, Market
-from .models.feature import IndexInfo
+from .models.feature import IndexInfo, VolumeProfile
 from .models.finance import (
     FinancialFileInfo,
     FinancialRecord,
@@ -684,6 +687,15 @@ class TdxClient:
     def get_index_info(self, market: Market, code: str) -> IndexInfo:
         """指数概况（0x051d，含涨跌家数与委托分布）。"""
         return self._execute_std(GetIndexInfoCmd(market, code))
+
+    def get_top_board(self, size: int = 20, category: int = 0) -> pd.DataFrame:
+        """排行榜（0x053f，9 组榜单：涨幅/跌幅/振幅/涨速/量比/委比/换手）。"""
+        items = self._execute_std(GetTopBoardCmd(category, size), require_nonempty=True)
+        return _to_df(items)
+
+    def get_volume_profile(self, market: Market, code: str) -> VolumeProfile:
+        """个股成交分布（0x051a，Volume Profile）。"""
+        return self._execute_std(GetVolumeProfileCmd(market, code))
 
     def get_bars(
         self,
@@ -1621,6 +1633,15 @@ class AsyncTdxClient:
     async def get_index_info(self, market: Market, code: str) -> IndexInfo:
         """指数概况（0x051d）异步版。"""
         return await self._execute_std(GetIndexInfoCmd(market, code))
+
+    async def get_top_board(self, size: int = 20, category: int = 0) -> pd.DataFrame:
+        """排行榜（0x053f）异步版。"""
+        items = await self._execute_std(GetTopBoardCmd(category, size), require_nonempty=True)
+        return _to_df(items)
+
+    async def get_volume_profile(self, market: Market, code: str) -> VolumeProfile:
+        """个股成交分布（0x051a）异步版。"""
+        return await self._execute_std(GetVolumeProfileCmd(market, code))
 
     async def get_bars(
         self,

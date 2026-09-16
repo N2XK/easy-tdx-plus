@@ -47,3 +47,52 @@ class IndexInfo:
     down_count: int
     orders: list[IndexInfoOrder] = field(default_factory=list)
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
+class TopBoardItem:
+    """排行榜条目（0x053f）。"""
+
+    category: str
+    market: int
+    code: str
+    price: float
+    value: float
+    _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
+class VolumeProfileItem:
+    """成交分布档位（0x051a）。"""
+
+    price: float
+    vol: int
+    buy: int
+    sell: int
+
+
+@dataclass
+class VolumeProfile:
+    """个股成交分布（0x051a）。"""
+
+    market: int
+    code: str
+    active: int
+    close: float
+    pre_close: float
+    open: float
+    high: float
+    low: float
+    server_time: str
+    neg_price: float
+    vol: int
+    cur_vol: int
+    amount: float
+    in_vol: int
+    out_vol: int
+    s_amount: int
+    open_amount: int
+    bids: list[tuple[float, int]] = field(default_factory=list)
+    asks: list[tuple[float, int]] = field(default_factory=list)
+    profiles: list[VolumeProfileItem] = field(default_factory=list)
+    _raw: bytes = field(default=b"", repr=False, compare=False)

@@ -24,7 +24,12 @@ from ._df import (
 from .codec.block import parse_block_dat
 from .codec.configdata import (
     fill_block_index_with_alias,
+    parse_named_blocks,
     parse_spblock,
+    parse_tdx_adr,
+    parse_tdx_ah_rate,
+    parse_tdx_chain,
+    parse_tdx_holidays,
     parse_tdxbk,
     parse_tdxhy,
     parse_tdxstat,
@@ -1123,6 +1128,39 @@ class TdxClient:
         """行业归属（tdxhy.cfg）：通达信行业 + 申万行业。"""
         return _to_df(parse_tdxhy(self.get_report_file("tdxhy.cfg")))
 
+    def get_ah_rates(self) -> pd.DataFrame:
+        """A/H 股对照（tdxahrate.cfg）：name / a_code / h_code / flag。"""
+        return _to_df(parse_tdx_ah_rate(self._zhb_member("tdxahrate.cfg")))
+
+    def get_adr_list(self) -> pd.DataFrame:
+        """港股/中概 ↔ ADR 对照（tdxadr.cfg）：name / code / adr / flag。"""
+        return _to_df(parse_tdx_adr(self._zhb_member("tdxadr.cfg")))
+
+    def get_industry_chain(self) -> pd.DataFrame:
+        """产业链板块（tdxchain.cfg）：code / cyl_code / name。"""
+        return _to_df(parse_tdx_chain(self._zhb_member("tdxchain.cfg")))
+
+    def get_named_blocks(self, filename: str = "jjblock.dat") -> pd.DataFrame:
+        """具名板块成分（jjblock/mgblock/hkblock/csiblock.dat），返回 block/code 两列。
+
+        Args:
+            filename: zhb.zip 成员名；常用 ``jjblock.dat``（基金）、``mgblock.dat``（美股）、
+                ``hkblock.dat``（港股）、``csiblock.dat``（中证指数）。
+        """
+        blocks = parse_named_blocks(self._zhb_member(filename))
+        rows = [{"block": b.name, "code": c} for b in blocks for c in b.codes]
+        return pd.DataFrame(rows, columns=["block", "code"])
+
+    def get_tdx_holidays(self) -> pd.DataFrame:
+        """通达信内嵌节假日表（needini.dat），返回 year / mmdd / date。"""
+        holidays = parse_tdx_holidays(self._zhb_member("needini.dat"))
+        rows = [
+            {"year": year, "mmdd": mmdd, "date": f"{year}-{mmdd[:2]}-{mmdd[2:]}"}
+            for year, days in holidays.items()
+            for mmdd in days
+        ]
+        return pd.DataFrame(rows, columns=["year", "mmdd", "date"])
+
     # ------------------------------------------------------------------ #
     # 派生计算（复权 / 基础指标）
     # ------------------------------------------------------------------ #
@@ -2118,6 +2156,37 @@ class AsyncTdxClient:
     async def get_tdx_hy(self) -> pd.DataFrame:
         """行业归属（tdxhy.cfg）。"""
         return _to_df(parse_tdxhy(await self.get_report_file("tdxhy.cfg")))
+
+    async def get_ah_rates(self) -> pd.DataFrame:
+        """A/H 股对照（tdxahrate.cfg）。"""
+        files = await self.get_zhb_files()
+        return _to_df(parse_tdx_ah_rate(files.get("tdxahrate.cfg", b"")))
+
+    async def get_adr_list(self) -> pd.DataFrame:
+        """港股/中概 ↔ ADR 对照（tdxadr.cfg）。"""
+        files = await self.get_zhb_files()
+        return _to_df(parse_tdx_adr(files.get("tdxadr.cfg", b"")))
+
+    async def get_industry_chain(self) -> pd.DataFrame:
+        """产业链板块（tdxchain.cfg）。"""
+        files = await self.get_zhb_files()
+        return _to_df(parse_tdx_chain(files.get("tdxchain.cfg", b"")))
+
+    async def get_named_blocks(self, filename: str = "jjblock.dat") -> pd.DataFrame:
+        """具名板块成分（jjblock/mgblock/hkblock/csiblock.dat）。"""
+        blocks = parse_named_blocks((await self.get_zhb_files()).get(filename, b""))
+        rows = [{"block": b.name, "code": c} for b in blocks for c in b.codes]
+        return pd.DataFrame(rows, columns=["block", "code"])
+
+    async def get_tdx_holidays(self) -> pd.DataFrame:
+        """通达信内嵌节假日表（needini.dat）。"""
+        holidays = parse_tdx_holidays((await self.get_zhb_files()).get("needini.dat", b""))
+        rows = [
+            {"year": year, "mmdd": mmdd, "date": f"{year}-{mmdd[:2]}-{mmdd[2:]}"}
+            for year, days in holidays.items()
+            for mmdd in days
+        ]
+        return pd.DataFrame(rows, columns=["year", "mmdd", "date"])
 
     @staticmethod
     async def _async_download_from_host(

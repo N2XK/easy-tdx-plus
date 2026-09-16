@@ -93,3 +93,43 @@ class TdxHy:
     code: str
     tdx_hy: str  # 通达信新行业代码（T 前缀）
     sw_hy: str  # 申万行业代码（X 前缀）
+
+
+@dataclass
+class TdxAhRate:
+    """A/H 股对照（来自 tdxahrate.cfg）。"""
+
+    name: str
+    a_code: str  # A 股代码，如 002594
+    h_code: str  # H 股代码，如 01211
+    flag: int = 0
+
+
+@dataclass
+class TdxAdr:
+    """境外上市对照（来自 tdxadr.cfg）：港股/中概 ↔ ADR 代码。"""
+
+    name: str
+    code: str  # 港股/中概代码
+    adr: str  # ADR 交易代码，如 BABA
+    flag: int = 0
+
+
+@dataclass
+class TdxChain:
+    """产业链板块（来自 tdxchain.cfg）。"""
+
+    code: str  # 板块指数代码，如 880506
+    cyl_code: str  # 产业链代码，如 CYL00210
+    name: str
+
+
+@dataclass
+class NamedBlock:
+    """具名板块成分（来自 jjblock.dat / mgblock.dat / hkblock.dat / csiblock.dat）。
+
+    文件以 ``#板块名`` 分行，随后每行一个成分（``市场,代码`` 或纯代码）。
+    """
+
+    name: str
+    codes: list[str]

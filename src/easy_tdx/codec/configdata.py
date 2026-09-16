@@ -9,8 +9,12 @@ import io
 import zipfile
 
 from ..models.configdata import (
+    NamedBlock,
     SpBlock,
+    TdxAdr,
+    TdxAhRate,
     TdxBk,
+    TdxChain,
     TdxHy,
     TdxStat,
     TdxStat2,
@@ -233,3 +237,80 @@ def fill_block_index_with_alias(blocks: list[SpBlock], zs: list[TdxZs], bk: list
             blk.index = code
             hit += 1
     return hit
+
+
+def parse_tdx_ah_rate(data: bytes) -> list[TdxAhRate]:
+    """解析 tdxahrate.cfg → A/H 股对照（``名称|A代码|H代码|flag``）。"""
+    out: list[TdxAhRate] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 3 or f[1] == "" or f[2] == "":
+            continue
+        out.append(TdxAhRate(name=f[0], a_code=f[1], h_code=f[2], flag=_to_int(_field(f, 3))))
+    return out
+
+
+def parse_tdx_adr(data: bytes) -> list[TdxAdr]:
+    """解析 tdxadr.cfg → 港股/中概 ↔ ADR（``名称|代码|ADR|flag``）。"""
+    out: list[TdxAdr] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 3 or f[1] == "" or f[2] == "":
+            continue
+        out.append(TdxAdr(name=f[0], code=f[1], adr=f[2], flag=_to_int(_field(f, 3))))
+    return out
+
+
+def parse_tdx_chain(data: bytes) -> list[TdxChain]:
+    """解析 tdxchain.cfg → 产业链板块（``板块代码|CYL代码|名称``）。"""
+    out: list[TdxChain] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 3 or f[0] == "":
+            continue
+        out.append(TdxChain(code=f[0], cyl_code=f[1], name=f[2]))
+    return out
+
+
+def parse_named_blocks(data: bytes) -> list[NamedBlock]:
+    """解析 ``#板块名`` 形式的板块成分文件（jjblock/mgblock/hkblock/csiblock.dat）。
+
+    成分行形如 ``市场,代码``（如 ``33,000176``）或纯代码（如美股 ``AAPL``）。
+    代码保留原始文本（含逗号前缀时一并保留，便于还原市场）。
+    """
+    out: list[NamedBlock] = []
+    current: NamedBlock | None = None
+    for ln in _lines(_decode_gbk(data)):
+        line = ln.strip()
+        if line == "":
+            continue
+        if line.startswith("#"):
+            current = NamedBlock(name=line[1:].strip(), codes=[])
+            out.append(current)
+        elif current is not None:
+            current.codes.append(line)
+    return out
+
+
+def parse_tdx_holidays(data: bytes) -> dict[int, list[str]]:
+    """解析 needini.dat → {年份: [MMDD, ...]}（通达信内嵌节假日表）。"""
+    out: dict[int, list[str]] = {}
+    for ln in _lines(_decode_gbk(data)):
+        line = ln.strip()
+        if not line.startswith("Y"):
+            continue
+        _, _, value = line.partition("=")
+        parts = [p for p in value.split(",") if p]
+        if len(parts) < 2:
+            continue
+        year = _to_int(parts[0])
+        if year <= 0:
+            continue
+        out[year] = parts[1:]
+    return out

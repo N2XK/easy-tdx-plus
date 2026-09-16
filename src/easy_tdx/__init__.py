@@ -72,6 +72,7 @@ from .models import (
 )
 from .parallel import ParallelTdx
 from .ratelimit import AsyncRateLimiter, RateLimiter, detect_phase
+from .trading_calendar import TradingCalendar
 from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, MAC_HOSTS, ping_all, ping_mac_all
 from .unified import AsyncUnifiedTdxClient, UnifiedTdxClient
 from .validation import check_bars, validate_bars
@@ -130,6 +131,7 @@ __all__ = [
     "ping_mac_all",
     "ParallelTdx",
     "Downloader",
+    "TradingCalendar",
     "RateLimiter",
     "AsyncRateLimiter",
     "detect_phase",

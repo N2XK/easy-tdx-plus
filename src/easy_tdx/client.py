@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Any, TypeVar, cast
@@ -82,6 +82,7 @@ from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
 from .ratelimit import AsyncRateLimiter, RateLimiter
+from .trading_calendar import TradingCalendar
 from .transport.async_ import AsyncTdxConnection
 from .transport.sync import TdxConnection, ping_all
 
@@ -765,6 +766,38 @@ class TdxClient:
         col = _bar_date_column(result)
         result = result.drop_duplicates(subset=[col]).sort_values(col).reset_index(drop=True)
         return result
+
+    def get_trading_calendar(
+        self,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        market: Market = Market.SH,
+        code: str = "000001",
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> TradingCalendar:
+        """由指数日线构建交易日历（默认上证指数）。
+
+        不内置节假日表，交易日来自真实 K 线，因此天然正确。
+        """
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars = self.get_bars_range(market, code, start_date, end_date, category)
+        return TradingCalendar.from_bars(bars)
+
+    def get_trading_days(
+        self,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        market: Market = Market.SH,
+        code: str = "000001",
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> list[date]:
+        """返回 [start_date, end_date] 内的交易日（升序）。"""
+        return self.get_trading_calendar(
+            start_date, end_date, market=market, code=code, category=category
+        ).days
 
     def get_k_data(
         self,
@@ -1765,6 +1798,36 @@ class AsyncTdxClient:
     ) -> pd.DataFrame:
         """便捷获取某代码日期区间内的 K 线（自动推断市场，默认日线）。"""
         return await self.get_bars_range(_infer_market(code), code, start_date, end_date, category)
+
+    async def get_trading_calendar(
+        self,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        market: Market = Market.SH,
+        code: str = "000001",
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> TradingCalendar:
+        """由指数日线构建交易日历（默认上证指数）。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars = await self.get_bars_range(market, code, start_date, end_date, category)
+        return TradingCalendar.from_bars(bars)
+
+    async def get_trading_days(
+        self,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        market: Market = Market.SH,
+        code: str = "000001",
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> list[date]:
+        """返回 [start_date, end_date] 内的交易日（升序）。"""
+        cal = await self.get_trading_calendar(
+            start_date, end_date, market=market, code=code, category=category
+        )
+        return cal.days
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
         today = _today_in_shanghai()

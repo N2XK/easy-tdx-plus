@@ -194,6 +194,32 @@ def test_ping(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "1.1.1.1" in res.output
 
 
+def test_ping_with_caps(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from easy_tdx.capabilities import FEATURES
+
+    monkeypatch.setattr("easy_tdx.transport.sync.ping_all", lambda *a, **k: [("1.1.1.1", 0.012)])
+    monkeypatch.setattr("easy_tdx.transport.sync.ping_mac_all", lambda *a, **k: [])
+    monkeypatch.setattr(
+        "easy_tdx.capabilities.probe_capabilities",
+        lambda h, **k: {f: True for f in FEATURES},
+    )
+    res = runner.invoke(cli, ["ping", "--caps", "--table"])
+    assert res.exit_code == 0, res.output
+    assert "kline" in res.output
+
+
+def test_caps_command(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from easy_tdx.capabilities import FEATURES
+
+    monkeypatch.setattr(
+        "easy_tdx.capabilities.probe_capabilities",
+        lambda h, **k: {f: (f != "finance") for f in FEATURES},
+    )
+    res = runner.invoke(cli, ["caps", "--host", "1.1.1.1", "--table"])
+    assert res.exit_code == 0, res.output
+    assert "quotes" in res.output and "1.1.1.1" in res.output
+
+
 # --------------------------------------------------------------------------- #
 # 未实现子命令（应显式报错，而非静默）
 # --------------------------------------------------------------------------- #

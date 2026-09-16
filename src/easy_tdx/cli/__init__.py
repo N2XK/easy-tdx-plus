@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from .cmd_admin import ping, version
+from .cmd_admin import caps, ping, version
 from .cmd_auction import auction
 from .cmd_board import belong_board, board_list, board_members
 from .cmd_capital import capital_flow
@@ -40,6 +40,7 @@ def cli() -> None:
 
 
 cli.add_command(ping)
+cli.add_command(caps)
 cli.add_command(version)
 cli.add_command(kline)
 cli.add_command(quote)

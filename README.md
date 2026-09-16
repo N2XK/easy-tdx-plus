@@ -126,7 +126,8 @@ easy-tdx ex tick HK_MAIN_BOARD 00700 --table               # 港股分时
 
 | 命令 | 说明 |
 |------|------|
-| `ping` | 服务器延迟测速 |
+| `ping` | 服务器延迟测速（`--caps` 附带能力探测） |
+| `caps` | 探测服务器分项能力（quotes/kline/transaction/…） |
 | `version` | 版本号 |
 | `kline` | K 线（日/周/月/分钟，支持复权） |
 | `quote` | 实时报价（单只/批量） |

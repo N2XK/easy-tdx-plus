@@ -18,7 +18,7 @@ from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
 from .commands.transaction import GetTransactionDataCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
-from .config import get_capability_cache, save_capability
+from .config import get_capability_cache, get_port, get_timeout, save_capability
 from .models.enums import KlineCategory, Market
 
 if TYPE_CHECKING:
@@ -55,8 +55,8 @@ def _probe(conn: Any, features: Iterable[str]) -> dict[str, bool]:
 
 def probe_capabilities(
     host: str,
-    port: int,
-    timeout: float,
+    port: int | None = None,
+    timeout: float | None = None,
     *,
     features: Iterable[str] | None = None,
     refresh: bool = False,
@@ -65,10 +65,14 @@ def probe_capabilities(
     """探测某服务器支持的能力（``{feature: bool}``）。
 
     结果按主机缓存 1 小时（进程内）；未命中时回看 config.json 的持久化缓存。
-    ``connection_factory`` 供测试注入假连接。
+    ``port`` / ``timeout`` 缺省时取 config 默认值；``connection_factory`` 供测试注入假连接。
     """
     from .transport.sync import TdxConnection as _Conn
 
+    if port is None:
+        port = get_port()
+    if timeout is None:
+        timeout = get_timeout()
     selected = tuple(features) if features is not None else FEATURES
     key = f"{host}:{port}"
 

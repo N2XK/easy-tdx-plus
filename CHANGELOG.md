@@ -44,6 +44,7 @@
   通用分页 helper `_paginate`、基金识别、CLI（`easy-tdx`）。
 - **可配置重试**：`TdxClient(retry_delays=...)` / 环境变量 `EASY_TDX_RETRY_DELAYS` / config.json `retry_delays`。
 - **服务器能力探测与选路**：`probe_capabilities`/`get_capabilities`（分项能力，缓存+持久化）；`from_best_host(require=[...])` 按能力选主机。
+- **CLI**：`easy-tdx ping --caps` 附带能力列；新增 `easy-tdx caps` 命令（可 `--host`/`--limit`/`--refresh`）。
 
 ### Changed
 

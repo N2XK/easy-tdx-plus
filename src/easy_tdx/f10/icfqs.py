@@ -30,14 +30,27 @@ ENTRY_QUOTES_BATCH = "HQServ.PBCombHQ"
 _HEADERS = {"Content-Type": "text/plain;charset=UTF-8"}
 
 
+def _to_tqlex_base(address: str) -> str:
+    base = address if "://" in address else f"http://{address}"
+    return base.rstrip("/") + "/TQLEX"
+
+
+# 需走 hot 网关的入口（龙虎榜 / 每日复盘）；题材等走默认网关。
+_HOT_ENTRIES = frozenset({ENTRY_LHB, ENTRY_MRFP})
+
+
 class IcfqsClient:
     """ICFQS TQLEX 客户端。
 
+    部分入口部署在 ``hot.icfqs.com``（龙虎榜/复盘），其余在默认网关；本客户端按入口
+    自动选网关，无需手动切换。
+
     Args:
-        address: ``host:port`` 或完整 base URL。
+        address: ``host:port`` 或完整 base URL（默认网关）。
+        hot_address: 龙虎榜/复盘专用网关地址。
         timeout: 单次请求超时秒数。
         retries: 网络错误重试次数。
-        transport: 自定义传输层（测试注入）。
+        transport: 自定义传输层（测试注入；注入时对全部入口生效）。
     """
 
     def __init__(
@@ -46,9 +59,11 @@ class IcfqsClient:
         timeout: float = 8.0,
         retries: int = 2,
         transport: TqlexTransport | None = None,
+        hot_address: str = DEFAULT_ICFQS_HOT_ADDRESS,
     ) -> None:
-        base = address if "://" in address else f"http://{address}"
-        self.base_url = base.rstrip("/") + "/TQLEX"
+        self.base_url = _to_tqlex_base(address)
+        self.hot_base_url = _to_tqlex_base(hot_address)
+        self._injected = transport is not None
         self._transport = transport or TqlexTransport(
             self.base_url,
             timeout=timeout,
@@ -56,6 +71,18 @@ class IcfqsClient:
             headers=_HEADERS,
             lenient_json=True,
         )
+        self._hot_transport = transport or TqlexTransport(
+            self.hot_base_url,
+            timeout=timeout,
+            retries=retries,
+            headers=_HEADERS,
+            lenient_json=True,
+        )
+
+    def _transport_for(self, entry: str) -> TqlexTransport:
+        if not self._injected and entry in _HOT_ENTRIES:
+            return self._hot_transport
+        return self._transport
 
     # ------------------------------------------------------------------ #
     # 底层
@@ -64,11 +91,11 @@ class IcfqsClient:
     def tql(self, entry: str, *params: Any) -> F10Response:
         """以 ``{"Params":[...], "oauth_zzfw":"1"}`` 形式调用。"""
         body = {"Params": list(params), "oauth_zzfw": "1"}
-        return parse_tqlex_response(entry, body, self._transport.post(entry, body))
+        return parse_tqlex_response(entry, body, self._transport_for(entry).post(entry, body))
 
     def post_json(self, entry: str, body: Any) -> F10Response:
         """以自定义 JSON body 调用。"""
-        return parse_tqlex_response(entry, body, self._transport.post(entry, body))
+        return parse_tqlex_response(entry, body, self._transport_for(entry).post(entry, body))
 
     # ------------------------------------------------------------------ #
     # 龙虎榜 / 游资

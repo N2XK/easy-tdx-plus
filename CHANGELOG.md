@@ -58,6 +58,8 @@
 
 ### Fixed
 
+- **ICFQS 网关路由**：龙虎榜(`cfg_fx_yzlhb`)/每日复盘(`cfg_tk_mrfp`) 需走 `hot.icfqs.com`，此前全走默认网关导致
+  HTTP 503；现按入口自动选网关。
 - `config._save` 并发写竞争：`ParallelTdx` 多线程回退写配置时，固定 `config.tmp` 会被竞争移走导致 `FileNotFoundError`；
   改为进程/线程唯一临时名 + 进程内锁。
 - F10/TQLEX 网关偶发返回空：`F10Client` 对空结果做有限重试（`empty_retries`），且空响应不入缓存。
@@ -78,6 +80,7 @@
 
 - CI：py3.10/3.12/3.13；`mypy`/`ruff` 阻断；覆盖率 `fail_under=50`。
 - 单元测试覆盖协议编解码、离线解析、公式、CLI（mock）等；集成测试（`XMTDX_LIVE=1`）。
+- 全接口实测脚本 `scripts/verify_all.py`（逐项调用各通道公开 API，汇总 OK/EMPTY/FAIL；实测 **144/144 通过**）。
 
 ### Known limitations
 

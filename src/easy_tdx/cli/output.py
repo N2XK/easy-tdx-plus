@@ -28,11 +28,6 @@ def print_output(df: pd.DataFrame, fmt: str = "json") -> None:
         click.echo(text)
 
 
-def print_error(msg: str) -> None:
-    """输出错误消息到 stderr。"""
-    click.echo(f"错误: {msg}", err=True)
-
-
 def _render_table(df: pd.DataFrame) -> str:
     """将 DataFrame 渲染为人类可读的文本表格。"""
     if df.empty:

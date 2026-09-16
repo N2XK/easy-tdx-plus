@@ -111,3 +111,30 @@ def test_response_parsed() -> None:
 def test_lenient_json_prefers_first_object() -> None:
     parsed = _decode_json(b'garbage{"a":1}trailing', lenient=True)
     assert parsed == {"a": 1}
+
+
+def test_icfqs_routes_hot_entries(monkeypatch: Any) -> None:
+    import easy_tdx.f10.icfqs as ic
+
+    created: list[Any] = []
+
+    class _T:
+        def __init__(self, base_url: str, **kwargs: Any) -> None:
+            self.base_url = base_url
+            self.calls: list[str] = []
+            created.append(self)
+
+        def post(self, entry: str, body: Any) -> dict[str, Any]:
+            self.calls.append(entry)
+            return _RESP
+
+    monkeypatch.setattr(ic, "TqlexTransport", _T)
+    c = ic.IcfqsClient()
+    c.daily_review_latest_date()  # CWServ.cfg_tk_mrfp -> hot
+    c.lhb_detail("000001", "20260101", "20260915")  # CWServ.cfg_fx_yzlhb -> hot
+    c.topics_hot()  # CWServ.ph_tdxdatacenter_zttz_zy -> 默认
+
+    default = next(t for t in created if "hot.icfqs.com" not in t.base_url)
+    hot = next(t for t in created if "hot.icfqs.com" in t.base_url)
+    assert hot.calls == ["CWServ.cfg_tk_mrfp", "CWServ.cfg_fx_yzlhb"]
+    assert default.calls == ["CWServ.ph_tdxdatacenter_zttz_zy"]

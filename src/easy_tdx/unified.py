@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from .codec.bitmap import Fields
 from .ex.mac_client import AsyncMacExClient, MacExClient
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
@@ -95,7 +96,7 @@ class UnifiedTdxClient:
     def get_stock_quotes(
         self,
         stocks: list[tuple[int, str]],
-        fields: object = None,
+        fields: Fields | None = None,
     ) -> pd.DataFrame:
         return self._ensure_mac().get_stock_quotes(stocks, fields)
 
@@ -107,7 +108,7 @@ class UnifiedTdxClient:
         sort_type: SortType = SortType.CHANGE_PCT,
         sort_order: SortOrder = SortOrder.DESC,
         exclude_flags: list[FilterType] | None = None,
-        fields: object = None,
+        fields: Fields | None = None,
     ) -> pd.DataFrame:
         return self._ensure_mac().get_stock_quotes_list(
             category, start, count, sort_type, sort_order, exclude_flags, fields
@@ -171,7 +172,7 @@ class UnifiedTdxClient:
         count: int = 100000,
         sort_type: SortType = SortType.CHANGE_PCT,
         sort_order: SortOrder = SortOrder.DESC,
-        fields: object = None,
+        fields: Fields | None = None,
         exclude_flags: list[FilterType] | None = None,
     ) -> pd.DataFrame:
         return self._ensure_mac().get_board_members(
@@ -364,7 +365,7 @@ class AsyncUnifiedTdxClient:
     async def get_stock_quotes(
         self,
         stocks: list[tuple[int, str]],
-        fields: object = None,
+        fields: Fields | None = None,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()
         return await mac.get_stock_quotes(stocks, fields)
@@ -377,7 +378,7 @@ class AsyncUnifiedTdxClient:
         sort_type: SortType = SortType.CHANGE_PCT,
         sort_order: SortOrder = SortOrder.DESC,
         exclude_flags: list[FilterType] | None = None,
-        fields: object = None,
+        fields: Fields | None = None,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()
         return await mac.get_stock_quotes_list(
@@ -449,7 +450,7 @@ class AsyncUnifiedTdxClient:
         count: int = 100000,
         sort_type: SortType = SortType.CHANGE_PCT,
         sort_order: SortOrder = SortOrder.DESC,
-        fields: object = None,
+        fields: Fields | None = None,
         exclude_flags: list[FilterType] | None = None,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()

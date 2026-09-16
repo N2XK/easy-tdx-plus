@@ -131,9 +131,7 @@ class UnusualCmd(BaseCommand[list[UnusualItem]]):
 
             desc, value = _describe_unusual(unusual_type, body[offset + 15 : offset + 28])
 
-            hour, minute_sec = unpack_from(
-                "<BH", body, offset + 29, f"unusual time[{i}]"
-            )
+            hour, minute_sec = unpack_from("<BH", body, offset + 29, f"unusual time[{i}]")
 
             results.append(
                 UnusualItem(

@@ -18,27 +18,27 @@ class XdxrRecord:
     year: int
     month: int
     day: int
-    category: int   # 事件类型（见下方 CATEGORY_NAMES）
-    name: str       # 事件类型名称
+    category: int  # 事件类型（见下方 CATEGORY_NAMES）
+    name: str  # 事件类型名称
 
     # category == 1（除权除息）
-    fenhong: float | None = None      # 每股分红（元；协议原值按每10股）
-    peigujia: float | None = None     # 配股价（元/股）
+    fenhong: float | None = None  # 每股分红（元；协议原值按每10股）
+    peigujia: float | None = None  # 配股价（元/股）
     songzhuangu: float | None = None  # 每股送转股比例（协议原值按每10股）
-    peigu: float | None = None        # 每股配股比例（协议原值按每10股）
+    peigu: float | None = None  # 每股配股比例（协议原值按每10股）
 
     # category in [11, 12]（扩缩股）
-    suogu: float | None = None        # 缩股比例
+    suogu: float | None = None  # 缩股比例
 
     # category in [13, 14]（权证）
     xingquanjia: float | None = None  # 行权价
-    fenshu: float | None = None       # 分数
+    fenshu: float | None = None  # 分数
 
     # category in [2..10]（股本变动类，单位：万股）
-    panqian_liutong: float | None = None   # 盘前流通股本（万股）
-    panhou_liutong: float | None = None    # 盘后流通股本（万股）
-    qian_zongguben: float | None = None    # 前总股本（万股）
-    hou_zongguben: float | None = None     # 后总股本（万股）
+    panqian_liutong: float | None = None  # 盘前流通股本（万股）
+    panhou_liutong: float | None = None  # 盘后流通股本（万股）
+    qian_zongguben: float | None = None  # 前总股本（万股）
+    hou_zongguben: float | None = None  # 后总股本（万股）
 
     _raw: bytes = field(default=b"", repr=False, compare=False)
 
@@ -69,45 +69,45 @@ class FinanceInfo:
     code: str
 
     # 股本（万股）
-    liutong_guben: float    # 流通股本
-    zong_guben: float       # 总股本
-    guojia_gu: float        # 国家股
+    liutong_guben: float  # 流通股本
+    zong_guben: float  # 总股本
+    guojia_gu: float  # 国家股
     faqiren_faren_gu: float  # 发起人法人股
-    faren_gu: float         # 法人股
-    b_gu: float             # B股
-    h_gu: float             # H股
-    zhigong_gu: float       # 职工股
+    faren_gu: float  # 法人股
+    b_gu: float  # B股
+    h_gu: float  # H股
+    zhigong_gu: float  # 职工股
 
     # 基本信息
-    province: int           # 所属省份代码
-    industry: int           # 所属行业代码
-    updated_date: int       # 财务更新日期 YYYYMMDD
-    ipo_date: int           # 上市日期 YYYYMMDD
-    gudong_renshu: float    # 股东人数
+    province: int  # 所属省份代码
+    industry: int  # 所属行业代码
+    updated_date: int  # 财务更新日期 YYYYMMDD
+    ipo_date: int  # 上市日期 YYYYMMDD
+    gudong_renshu: float  # 股东人数
 
     # 资产负债（元）
-    zong_zichan: float       # 总资产
-    liudong_zichan: float    # 流动资产
-    guding_zichan: float     # 固定资产
-    wuxing_zichan: float     # 无形资产
-    liudong_fuzhai: float    # 流动负债
-    changqi_fuzhai: float    # 长期负债
-    ziben_gongjijin: float   # 资本公积金
-    jing_zichan: float       # 净资产
+    zong_zichan: float  # 总资产
+    liudong_zichan: float  # 流动资产
+    guding_zichan: float  # 固定资产
+    wuxing_zichan: float  # 无形资产
+    liudong_fuzhai: float  # 流动负债
+    changqi_fuzhai: float  # 长期负债
+    ziben_gongjijin: float  # 资本公积金
+    jing_zichan: float  # 净资产
 
     # 利润（元）
-    zhuying_shouru: float    # 主营收入
-    zhuying_lirun: float     # 主营利润
+    zhuying_shouru: float  # 主营收入
+    zhuying_lirun: float  # 主营利润
     yingshou_zhangkuan: float  # 应收账款
-    yingye_lirun: float      # 营业利润
-    touzi_shouyu: float      # 投资收益
+    yingye_lirun: float  # 营业利润
+    touzi_shouyu: float  # 投资收益
     jingying_xianjinliu: float  # 经营现金流
-    zong_xianjinliu: float   # 总现金流
-    cunhuo: float            # 存货
-    lirun_zonghe: float      # 利润总额
-    shuihou_lirun: float     # 税后利润
-    jing_lirun: float        # 净利润
-    weifen_lirun: float      # 未分配利润
+    zong_xianjinliu: float  # 总现金流
+    cunhuo: float  # 存货
+    lirun_zonghe: float  # 利润总额
+    shuihou_lirun: float  # 税后利润
+    jing_lirun: float  # 净利润
+    weifen_lirun: float  # 未分配利润
 
     # 每股指标
     meigujing_zichan: float  # 每股净资产（原 baoliu1）
@@ -122,36 +122,36 @@ class FinanceInfo:
 class CompanyInfoCategory:
     """公司信息文件目录条目"""
 
-    name: str = ""      # 目录名（如“最新提示”）
+    name: str = ""  # 目录名（如“最新提示”）
     filename: str = ""  # 文件名（如 '600000.txt'）
-    start: int = 0      # 内容起始偏移
-    length: int = 0     # 内容长度（字节）
+    start: int = 0  # 内容起始偏移
+    length: int = 0  # 内容长度（字节）
 
 
 @dataclass
 class FinancialFileInfo:
     """财报 zip 文件索引条目（来自 tdxfin/gpcw.txt）。"""
 
-    filename: str    # "gpcw20260331.zip"
-    hash: str        # MD5 hex digest
-    filesize: int    # 字节
+    filename: str  # "gpcw20260331.zip"
+    hash: str  # MD5 hex digest
+    filesize: int  # 字节
 
 
 @dataclass
 class FinancialRecord:
     """单只股票的一期历史专业财报记录。"""
 
-    code: str              # 6 位股票代码
-    market: Market         # 市场
-    report_date: int       # 报告期 YYYYMMDD
-    fields: list[float]    # N 个浮点字段（N = report_size / 4）
+    code: str  # 6 位股票代码
+    market: Market  # 市场
+    report_date: int  # 报告期 YYYYMMDD
+    fields: list[float]  # N 个浮点字段（N = report_size / 4）
 
 
 @dataclass
 class TdxBlock:
     """通达信板块信息（行业、概念、风格等）"""
 
-    name: str           # 板块名称（如“房地产”）
-    category: int       # 板块分类（0=行业, 1=地域, 2=概念, 3=风格, 等）
-    count: int          # 板块包含股票数量
-    codes: list[str]    # 股票代码列表（6位数字代码）
+    name: str  # 板块名称（如“房地产”）
+    category: int  # 板块分类（0=行业, 1=地域, 2=概念, 3=风格, 等）
+    count: int  # 板块包含股票数量
+    codes: list[str]  # 股票代码列表（6位数字代码）

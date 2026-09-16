@@ -26,8 +26,6 @@ class GetTransactionDataCmd(BaseCommand[list[TransactionRecord]]):
         header = bytes.fromhex("0c170801010 10e000e00c50f".replace(" ", ""))
         return header + struct.pack("<H6sHH", int(self.market), self.code, self.start, self.count)
 
-
-
     def parse_response(self, body: bytes) -> list[TransactionRecord]:
         return _parse_transaction_body(body)
 
@@ -35,9 +33,7 @@ class GetTransactionDataCmd(BaseCommand[list[TransactionRecord]]):
 class GetHistoryTransactionDataCmd(BaseCommand[list[TransactionRecord]]):
     """获取历史某日逐笔成交（date 格式 YYYYMMDD，分页）。"""
 
-    def __init__(
-        self, market: Market, code: str, date: int, start: int, count: int = 800
-    ) -> None:
+    def __init__(self, market: Market, code: str, date: int, start: int, count: int = 800) -> None:
         self.market = market
         self.code = code.encode("utf-8")
         self.date = date
@@ -72,11 +68,17 @@ def _parse_transaction_body(body: bytes) -> list[TransactionRecord]:
         buyorsell, pos = get_price(body, pos)
         unknown_last, pos = get_price(body, pos)  # Bug #4 修复：不再丢弃
         last_price += price_diff
-        records.append(TransactionRecord(
-            hour=hour, minute=minute,
-            price=last_price / 100.0, vol=vol, buyorsell=buyorsell,
-            unknown_last=unknown_last, _raw=body[record_start:pos],
-        ))
+        records.append(
+            TransactionRecord(
+                hour=hour,
+                minute=minute,
+                price=last_price / 100.0,
+                vol=vol,
+                buyorsell=buyorsell,
+                unknown_last=unknown_last,
+                _raw=body[record_start:pos],
+            )
+        )
 
     return records
 
@@ -93,13 +95,19 @@ def _parse_history_transaction_body(body: bytes) -> list[TransactionRecord]:
         hour, minute, pos = get_time(body, pos)
         price_diff, pos = get_price(body, pos)
         vol, pos = get_price(body, pos)
-        buyorsell, pos = get_price(body, pos)      # 历史无 num_orders
+        buyorsell, pos = get_price(body, pos)  # 历史无 num_orders
         unknown_last, pos = get_price(body, pos)
         last_price += price_diff
-        records.append(TransactionRecord(
-            hour=hour, minute=minute,
-            price=last_price / 100.0, vol=vol, buyorsell=buyorsell,
-            unknown_last=unknown_last, _raw=body[record_start:pos],
-        ))
+        records.append(
+            TransactionRecord(
+                hour=hour,
+                minute=minute,
+                price=last_price / 100.0,
+                vol=vol,
+                buyorsell=buyorsell,
+                unknown_last=unknown_last,
+                _raw=body[record_start:pos],
+            )
+        )
 
     return records

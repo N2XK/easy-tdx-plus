@@ -7,13 +7,10 @@
 日线及以上（其余 category）：4 字节 YYYYMMDD 整数
 """
 
-
 from .._binary import unpack_from
 
 
-def get_datetime_minute(
-    data: bytes | bytearray, pos: int
-) -> tuple[int, int, int, int, int, int]:
+def get_datetime_minute(data: bytes | bytearray, pos: int) -> tuple[int, int, int, int, int, int]:
     """解析分钟级时间戳（4 字节）。
 
     Returns:
@@ -28,9 +25,7 @@ def get_datetime_minute(
     return year, month, day, hour, minute, pos + 4
 
 
-def get_datetime_day(
-    data: bytes | bytearray, pos: int
-) -> tuple[int, int, int, int]:
+def get_datetime_day(data: bytes | bytearray, pos: int) -> tuple[int, int, int, int]:
     """解析日期（4 字节 YYYYMMDD）。
 
     Returns:

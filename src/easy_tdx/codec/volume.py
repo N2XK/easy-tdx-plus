@@ -9,7 +9,6 @@
 警告：此函数专为成交量设计，不可用于价格字段（pytdx Bug #3）。
 """
 
-
 from .._binary import unpack_from
 
 
@@ -53,5 +52,5 @@ def _decode_volume(ivol: int) -> float:
 
 def _pow2(exp: int) -> float:
     if exp >= 0:
-        return float(1 << exp) if exp < 63 else 2.0 ** exp
-    return 1.0 / (1 << (-exp)) if -exp < 63 else 2.0 ** exp
+        return float(1 << exp) if exp < 63 else 2.0**exp
+    return 1.0 / (1 << (-exp)) if -exp < 63 else 2.0**exp

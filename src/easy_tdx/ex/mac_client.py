@@ -194,7 +194,7 @@ class MacExClient:
             return pd.DataFrame()
         total = self._execute(GetExInstrumentCountCmd())
         page_size = 1000
-        collected: list = []
+        collected: list[Any] = []
         skipped = 0
         pos = offset
         while pos < total and len(collected) < count:
@@ -573,7 +573,7 @@ class AsyncMacExClient:
             return pd.DataFrame()
         total = await self._execute(GetExInstrumentCountCmd())
         page_size = 1000
-        collected: list = []
+        collected: list[Any] = []
         skipped = 0
         pos = offset
         while pos < total and len(collected) < count:

@@ -27,7 +27,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 _CONFIG_DIR = Path(os.environ.get("EASY_TDX_CONFIG_DIR", str(Path.home() / ".easy_tdx")))
 _CONFIG_FILE = _CONFIG_DIR / "config.json"
@@ -152,7 +152,7 @@ _FALLBACK_TIMEOUT = 15.0
 def _load() -> dict[str, Any]:
     try:
         if _CONFIG_FILE.exists():
-            return json.loads(_CONFIG_FILE.read_text("utf-8"))
+            return cast("dict[str, Any]", json.loads(_CONFIG_FILE.read_text("utf-8")))
     except Exception:
         pass
     return {}
@@ -190,7 +190,7 @@ def get_best_host() -> str:
     if env:
         return env
     cfg = _load()
-    return cfg.get("best_host", _FALLBACK_HOSTS[0])
+    return cast("str", cfg.get("best_host", _FALLBACK_HOSTS[0]))
 
 
 def get_known_hosts() -> list[str]:
@@ -239,7 +239,7 @@ def get_best_ex_host() -> str:
     if env:
         return env
     cfg = _load()
-    return cfg.get("best_ex_host", _FALLBACK_EX_HOSTS[0])
+    return cast("str", cfg.get("best_ex_host", _FALLBACK_EX_HOSTS[0]))
 
 
 def get_mac_ex_hosts() -> list[str]:
@@ -254,7 +254,7 @@ def get_best_mac_ex_host() -> str:
     if env:
         return env
     cfg = _load()
-    return cfg.get("best_mac_ex_host", _FALLBACK_MAC_EX_HOSTS[0])
+    return cast("str", cfg.get("best_mac_ex_host", _FALLBACK_MAC_EX_HOSTS[0]))
 
 
 def get_port() -> int:
@@ -263,7 +263,7 @@ def get_port() -> int:
     if env:
         return int(env)
     cfg = _load()
-    return cfg.get("port", _FALLBACK_PORT)
+    return cast("int", cfg.get("port", _FALLBACK_PORT))
 
 
 def get_timeout() -> float:
@@ -272,7 +272,7 @@ def get_timeout() -> float:
     if env:
         return float(env)
     cfg = _load()
-    return cfg.get("timeout", _FALLBACK_TIMEOUT)
+    return cast("float", cfg.get("timeout", _FALLBACK_TIMEOUT))
 
 
 # ---------------------------------------------------------------------------

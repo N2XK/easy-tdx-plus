@@ -202,9 +202,7 @@ def test_macd_matches_indicator() -> None:
     from easy_tdx.derive import macd as ind_macd
 
     bars = _long_bars()
-    out = evaluate(
-        "DIF: EMA(CLOSE,12)-EMA(CLOSE,26); DEA: EMA(DIF,9); M: (DIF-DEA)*2;", bars
-    )
+    out = evaluate("DIF: EMA(CLOSE,12)-EMA(CLOSE,26); DEA: EMA(DIF,9); M: (DIF-DEA)*2;", bars)
     expect = ind_macd(bars["close"])
     pd.testing.assert_series_equal(out["DIF"], expect["dif"], check_names=False)
     pd.testing.assert_series_equal(out["DEA"], expect["dea"], check_names=False)
@@ -234,9 +232,7 @@ def test_boll_matches_indicator() -> None:
     from easy_tdx.derive import boll as ind_boll
 
     bars = _long_bars()
-    out = evaluate(
-        "MID: MA(CLOSE,20); UP: MID+2*STD(CLOSE,20); LO: MID-2*STD(CLOSE,20);", bars
-    )
+    out = evaluate("MID: MA(CLOSE,20); UP: MID+2*STD(CLOSE,20); LO: MID-2*STD(CLOSE,20);", bars)
     expect = ind_boll(bars["close"])
     pd.testing.assert_series_equal(out["MID"], expect["boll_mid"], check_names=False)
     pd.testing.assert_series_equal(out["UP"], expect["boll_upper"], check_names=False)

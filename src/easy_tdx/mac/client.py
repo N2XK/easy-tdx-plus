@@ -75,6 +75,8 @@ def _convert_board_code(board_symbol: str) -> int:
         if s.startswith("000"):
             return 31000 + int(s)
     return int(s)
+
+
 _TRANSACTION_PAGE_SIZE = 1000
 
 _T = TypeVar("_T")
@@ -392,8 +394,7 @@ class MacClient:
         from datetime import date as date_cls
 
         query_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         chart = self._execute(SymbolTickChartCmd(market, code, query_date))
         return pd.DataFrame(_flatten_tick_chart(chart))
@@ -416,8 +417,7 @@ class MacClient:
         from datetime import date as date_cls
 
         start_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         chart = self._execute(TickChartsCmd(market, code, start_date, days))
         return pd.DataFrame(_flatten_multi_tick_chart(chart))
@@ -460,8 +460,7 @@ class MacClient:
         from datetime import date as date_cls
 
         query_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         all_items = self._execute(
             SymbolTransactionCmd(
@@ -1014,8 +1013,7 @@ class AsyncMacClient:
         from datetime import date as date_cls
 
         query_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         chart = await self._execute(SymbolTickChartCmd(market, code, query_date))
         return pd.DataFrame(_flatten_tick_chart(chart))
@@ -1030,8 +1028,7 @@ class AsyncMacClient:
         from datetime import date as date_cls
 
         start_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         chart = await self._execute(TickChartsCmd(market, code, start_date, days))
         return pd.DataFrame(_flatten_multi_tick_chart(chart))
@@ -1055,8 +1052,7 @@ class AsyncMacClient:
         from datetime import date as date_cls
 
         query_date = (
-            date_cls(date // 10000, (date % 10000) // 100, date % 100)
-            if date is not None else None
+            date_cls(date // 10000, (date % 10000) // 100, date % 100) if date is not None else None
         )
         all_items = await self._execute(
             SymbolTransactionCmd(

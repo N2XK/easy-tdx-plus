@@ -12,18 +12,20 @@ _MSG_ID = 0x2454
 _HEAD_FLAG = 0x01
 
 # 80 字节 Login body，来自 opentdx 参考实现，已通过实际测试验证。
-_LOGIN_BODY = bytes(bytearray.fromhex(
-    "e5bb1c2fafe52594"
-    "1f32c6e5d53dfb41"
-    "5b734cc9cdbf0ac9"
-    "2021bfdd1eb06d22"
-    "d008884c1611cb13"
-    "78f6abd824d899d2"
-    "1f32c6e5d53dfb41"
-    "1f32c6e5d53dfb41"
-    "a9325ac935dc0837"
-    "335a16e4ce17c1bb"
-))
+_LOGIN_BODY = bytes(
+    bytearray.fromhex(
+        "e5bb1c2fafe52594"
+        "1f32c6e5d53dfb41"
+        "5b734cc9cdbf0ac9"
+        "2021bfdd1eb06d22"
+        "d008884c1611cb13"
+        "78f6abd824d899d2"
+        "1f32c6e5d53dfb41"
+        "1f32c6e5d53dfb41"
+        "a9325ac935dc0837"
+        "335a16e4ce17c1bb"
+    )
+)
 
 # EX 协议帧头格式: head_flag(1B) + customize(4B) + version(1B) + zipsize(2B) + unzipsize(2B)
 _EX_HEADER_FMT = "<BIBHH"

@@ -61,9 +61,7 @@ class TestParseFinancialDat:
         index_entries: list[bytes] = []
         for i, (code, market_byte, _) in enumerate(stocks):
             index_entries.append(
-                struct.pack(
-                    index_fmt, code.encode("ascii"), bytes([market_byte]), offsets[i]
-                )
+                struct.pack(index_fmt, code.encode("ascii"), bytes([market_byte]), offsets[i])
             )
 
         return header + b"".join(index_entries) + b"".join(data_chunks)

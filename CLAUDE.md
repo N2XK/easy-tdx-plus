@@ -8,15 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 单元测试（无需网络，使用 tests/fixtures/ 中的 hex 数据）
 python -m pytest tests/unit/ -v
 
+# 覆盖率（fail_under=50，配置见 pyproject.toml）
+python -m pytest tests/unit/ --cov=easy_tdx --cov-report=term-missing
+
 # 集成测试（需要网络，默认跳过）
 XMTDX_LIVE=1 python -m pytest tests/integration/ -v
 
-# 类型检查（strict mypy）
+# 类型检查（strict mypy；pandas/tabulate 缺 stub 已在 pyproject 忽略）
 mypy src/
 
-# lint + format
-ruff check src/ tests/
-ruff format --check src/ tests/
+# lint + format（含 examples/）
+ruff check src/ tests/ examples/
+ruff format --check src/ tests/ examples/
 ```
 
 ## 架构

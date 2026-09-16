@@ -11,7 +11,7 @@ class SecurityBar:
     close: float
     high: float
     low: float
-    vol: float    # 成交量（股）
+    vol: float  # 成交量（股）
     amount: float  # 成交额（元）
 
     year: int

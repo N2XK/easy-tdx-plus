@@ -286,9 +286,7 @@ def test_get_history_transaction_all_keeps_identical_ticks(
 
 def test_get_history_transaction_all_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     c = _client()
-    monkeypatch.setattr(
-        c, "get_history_transaction_data", lambda *a, **k: pd.DataFrame()
-    )
+    monkeypatch.setattr(c, "get_history_transaction_data", lambda *a, **k: pd.DataFrame())
     assert c.get_history_transaction_all(Market.SZ, "000001", 20240102).empty
 
 

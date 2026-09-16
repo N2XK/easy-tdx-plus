@@ -27,10 +27,12 @@ from easy_tdx import MacClient, Market
 
 with MacClient.from_best_host() as c:
     # 批量查询多只股票报价（最多 80 只/次）
-    df = c.get_stock_quotes([
-        (Market.SH, "600519"),  # 贵州茅台
-        (Market.SZ, "000858"),  # 五粮液
-    ])
+    df = c.get_stock_quotes(
+        [
+            (Market.SH, "600519"),  # 贵州茅台
+            (Market.SZ, "000858"),  # 五粮液
+        ]
+    )
     print(df.to_string(index=False))
 
 # 运行结果:

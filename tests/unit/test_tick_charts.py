@@ -16,10 +16,10 @@ def _body() -> bytes:
     struct.pack_into("<HBHH", b, 64, 2, 1, 3, 4)
 
     ticks = [
-        (640, 10.0, 10.1, 5, 0),      # 今日(新→旧排在前) 单条
-        (570, 11.0, 11.0, 1, 0),      # 昨日
+        (640, 10.0, 10.1, 5, 0),  # 今日(新→旧排在前) 单条
+        (570, 11.0, 11.0, 1, 0),  # 昨日
         (571, 11.1, 11.0, 2, 0),
-        (0xFFFF, 0.0, 0.0, 0, 0),     # 无效填充（minutes 越界，应跳过）
+        (0xFFFF, 0.0, 0.0, 0, 0),  # 无效填充（minutes 越界，应跳过）
     ]
     for minutes, price, avg, vol, res in ticks:
         b += struct.pack("<HffHH", minutes, price, avg, vol, res)

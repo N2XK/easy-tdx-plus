@@ -59,7 +59,10 @@ class GoodsListCmd(BaseCommand[list[GoodsItem]]):
             offset = 2 + i * _RECORD_SIZE
             require_bytes(body, offset, _RECORD_SIZE, f"GoodsListCmd record[{i}]")
             category, raw_name, u, index, switch, v1, v2, v3, c1, c2 = unpack_from(
-                _RECORD_FMT, body, offset, f"GoodsListCmd record[{i}]",
+                _RECORD_FMT,
+                body,
+                offset,
+                f"GoodsListCmd record[{i}]",
             )
             name = raw_name.decode("gbk", errors="replace").rstrip("\x00")
             items.append(

@@ -57,7 +57,8 @@ def kline(
     mkt = parse_ex_market(market)
     with get_mac_ex_client() as client:
         df = client.goods_kline(
-            mkt, code,
+            mkt,
+            code,
             period=parse_period(period),
             start=start,
             count=count,

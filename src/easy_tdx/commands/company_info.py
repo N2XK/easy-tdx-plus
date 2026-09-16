@@ -39,12 +39,14 @@ class GetCompanyInfoCategoryCmd(BaseCommand[list[CompanyInfoCategory]]):
                 raw = b[:nul] if nul != -1 else b
                 return raw.decode("gbk", errors="replace")
 
-            results.append(CompanyInfoCategory(
-                name=_decode(name_b),
-                filename=_decode(filename_b),
-                start=start,
-                length=length,
-            ))
+            results.append(
+                CompanyInfoCategory(
+                    name=_decode(name_b),
+                    filename=_decode(filename_b),
+                    start=start,
+                    length=length,
+                )
+            )
 
         return results
 
@@ -52,9 +54,7 @@ class GetCompanyInfoCategoryCmd(BaseCommand[list[CompanyInfoCategory]]):
 class GetCompanyInfoContentCmd(BaseCommand[str]):
     """按文件名、偏移、长度读取公司信息文本（GBK 编码）。"""
 
-    def __init__(
-        self, market: Market, code: str, filename: str, offset: int, length: int
-    ) -> None:
+    def __init__(self, market: Market, code: str, filename: str, offset: int, length: int) -> None:
         self.market = market
         self.code = code.encode("utf-8")
         self.filename = filename.encode("gbk")
@@ -66,7 +66,13 @@ class GetCompanyInfoContentCmd(BaseCommand[str]):
         header = bytes.fromhex("0c07109c0001680068 00d002".replace(" ", ""))
         return header + struct.pack(
             "<H6sH80sIII",
-            int(self.market), self.code, 0, fname_padded, self.offset, self.length, 0,
+            int(self.market),
+            self.code,
+            0,
+            fname_padded,
+            self.offset,
+            self.length,
+            0,
         )
 
     def parse_response(self, body: bytes) -> str:

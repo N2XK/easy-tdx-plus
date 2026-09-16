@@ -1,8 +1,9 @@
 """通达信行业配置文件 (tdxhy.cfg) 解析器。"""
 
+
 def parse_tdxhy_cfg(content: bytes) -> dict[str, tuple[str, str]]:
     """解析 tdxhy.cfg 字节内容。
-    
+
     返回字典: { "code": (tdx_industry, sw_industry), ... }
     """
     results = {}

@@ -24,10 +24,16 @@ strict = true
 python_version = "3.10"
 
 # numpy 自带 stub 使用 3.12+ 语法，与项目的 3.10 目标不兼容；跳过其类型检查。
+# pandas / tabulate 依赖第三方 stub（pandas-stubs / types-tabulate），这里不作为强制
+# 依赖，统一忽略其缺失 stub，仅对项目自身代码保持 strict。
 [[tool.mypy.overrides]]
 module = ["numpy", "numpy.*"]
 follow_imports = "skip"
 follow_imports_for_stubs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*", "tabulate", "tabulate.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -36,3 +42,16 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# 示例中含较长的中文说明/输出注释，放宽行长限制
+"examples/**" = ["E501"]
+
+[tool.coverage.run]
+source = ["easy_tdx"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 50
+exclude_lines = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]

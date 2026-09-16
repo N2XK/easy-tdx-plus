@@ -21,7 +21,7 @@ def parse_block_dat(data: bytes, filename: str = "") -> list["TdxBlock"]:
         return []
 
     pos = 384
-    (count,) = struct.unpack("<H", data[pos:pos+2])
+    (count,) = struct.unpack("<H", data[pos : pos + 2])
     pos += 2
 
     results: list[TdxBlock] = []
@@ -40,8 +40,8 @@ def parse_block_dat(data: bytes, filename: str = "") -> list["TdxBlock"]:
             break
 
         # 板块元数据 (9 字节名称 + 2 字节股票数 + 2 字节类型)
-        name_b = data[pos:pos+9]
-        stock_count, _type = struct.unpack("<HH", data[pos+9:pos+13])
+        name_b = data[pos : pos + 9]
+        stock_count, _type = struct.unpack("<HH", data[pos + 9 : pos + 13])
         name = name_b.decode("gbk", errors="replace").strip("\x00")
 
         # 股票代码区 (2800 字节，每只股票 7 字节)
@@ -51,17 +51,19 @@ def parse_block_dat(data: bytes, filename: str = "") -> list["TdxBlock"]:
         actual_count = min(stock_count, 400)
         for i in range(actual_count):
             c_start = codes_start + i * 7
-            c_raw = data[c_start:c_start+7]
+            c_raw = data[c_start : c_start + 7]
             code = c_raw.decode("ascii", errors="replace").strip("\x00")
             if code:
                 codes.append(code)
 
-        results.append(TdxBlock(
-            name=name,
-            category=category,
-            count=stock_count,
-            codes=codes,
-        ))
+        results.append(
+            TdxBlock(
+                name=name,
+                category=category,
+                count=stock_count,
+                codes=codes,
+            )
+        )
 
         # 跳过整个 2813 字节的记录块
         pos += 2813

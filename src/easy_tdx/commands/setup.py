@@ -9,10 +9,7 @@ from typing import Final
 SETUP_CMD1: Final[bytes] = bytes.fromhex("0c0218930001030003000d0001")
 SETUP_CMD2: Final[bytes] = bytes.fromhex("0c0218940001030003000d0002")
 SETUP_CMD3: Final[bytes] = bytes.fromhex(
-    "0c031899000120002000db0f"
-    "d5d0c9ccd6a4a8af0000008f"
-    "c22540130000d500c9ccbdf0"
-    "d7ea00000002"
+    "0c031899000120002000db0fd5d0c9ccd6a4a8af0000008fc22540130000d500c9ccbdf0d7ea00000002"
 )
 
 SETUP_COMMANDS: Final[tuple[bytes, ...]] = (SETUP_CMD1, SETUP_CMD2, SETUP_CMD3)

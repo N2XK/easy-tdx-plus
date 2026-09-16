@@ -26,10 +26,13 @@ def test_sync_connection_closes_socket_when_setup_fails() -> None:
     sock = _FakeSocket()
     conn = TdxConnection("127.0.0.1", port=7709, timeout=0.2)
 
-    with patch("easy_tdx.transport.sync.socket.socket", return_value=sock), patch.object(
-        TdxConnection,
-        "_send_setup",
-        side_effect=TdxConnectionError("setup failed"),
+    with (
+        patch("easy_tdx.transport.sync.socket.socket", return_value=sock),
+        patch.object(
+            TdxConnection,
+            "_send_setup",
+            side_effect=TdxConnectionError("setup failed"),
+        ),
     ):
         try:
             conn.connect()

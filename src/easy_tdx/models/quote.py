@@ -17,18 +17,18 @@ class SecurityQuote:
     code: str
 
     # 价格
-    price: float      # 现价
+    price: float  # 现价
     pre_close: float  # 昨收
-    open: float       # 今开
-    high: float       # 最高
-    low: float        # 最低
+    open: float  # 今开
+    high: float  # 最高
+    low: float  # 最低
 
     # 量额
-    vol: float        # 总成交量（手）
-    cur_vol: float    # 当前成交量
-    amount: float     # 成交额（元）
-    s_vol: float      # 内盘（主动卖）
-    b_vol: float      # 外盘（主动买）
+    vol: float  # 总成交量（手）
+    cur_vol: float  # 当前成交量
+    amount: float  # 成交额（元）
+    s_vol: float  # 内盘（主动卖）
+    b_vol: float  # 外盘（主动买）
 
     # 活跃度指标（含义来自社区逆向，仅供参考）
     active1: int
@@ -60,7 +60,7 @@ class SecurityQuote:
 
     # 价格指标
     rise_speed: float  # 涨速（原 reversed_bytes9 / 100）
-    limit_up: float | None    # 涨停价（业务规则计算）
+    limit_up: float | None  # 涨停价（业务规则计算）
     limit_down: float | None  # 跌停价（业务规则计算）
 
     # 未知字段：买卖量之后的两个变长整数（保留供进一步分析）

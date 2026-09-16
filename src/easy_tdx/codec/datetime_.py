@@ -7,6 +7,8 @@
 日线及以上（其余 category）：4 字节 YYYYMMDD 整数
 """
 
+from datetime import date, datetime
+
 from .._binary import unpack_from
 
 
@@ -62,3 +64,24 @@ def get_time(data: bytes | bytearray, pos: int) -> tuple[int, int, int]:
     """
     (tminutes,) = unpack_from("<H", data, pos, "trade time")
     return tminutes // 60, tminutes % 60, pos + 2
+
+
+def coerce_date(value: object) -> date | None:
+    """把 date/datetime/YYYYMMDD(int)/字符串 归一为 ``datetime.date``。
+
+    便于在 ``query_date`` 一类参数上容忍多种写法，避免直接传 int 时触发
+    ``AttributeError: 'int' object has no attribute 'year'``。
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    for fmt in ("%Y%m%d", "%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"无法解析为日期: {value!r}")

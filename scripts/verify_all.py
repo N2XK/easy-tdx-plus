@@ -129,6 +129,20 @@ def run_standard() -> None:
         )
         check(g, "get_xdxr_info", lambda: c.get_xdxr_info(Market.SH, "600519"))
         check(g, "get_finance_info", lambda: c.get_finance_info(Market.SH, "600519"))
+        check(g, "get_basic_daily", lambda: c.get_basic_daily(Market.SH, "600519"))
+        check(
+            g,
+            "get_company_info_content",
+            lambda: c.get_company_info_content(
+                Market.SH,
+                "600519",
+                c.get_company_info_category(Market.SH, "600519").iloc[0]["filename"],
+                0,
+                100,
+            ),
+        )
+        check(g, "get_hk_stock_concepts", lambda: c.get_hk_stock_concepts())
+        check(g, "get_us_stock_concepts", lambda: c.get_us_stock_concepts())
         check(
             g, "get_company_info_category", lambda: c.get_company_info_category(Market.SH, "600519")
         )
@@ -230,12 +244,29 @@ def run_ex() -> None:
             check(g, "get_instrument_info", lambda: c.get_instrument_info(start=0, count=10))
             check(g, "get_server_info", lambda: c.get_server_info())
             check(g, "get_table", lambda: c.get_table(start=0))
+            hk = int(ExMarket.HK_MAIN_BOARD)
+            check(g, "get_instrument_quote", lambda: c.get_instrument_quote(hk, "00700"))
+            check(g, "get_instrument_bars", lambda: c.get_instrument_bars(2, hk, "00700", 0, 5))
+            check(
+                g,
+                "get_history_instrument_bars_range",
+                lambda: c.get_history_instrument_bars_range(hk, "00700", 20250101, 20250201),
+            )
+            check(g, "get_instrument_quote_list", lambda: c.get_instrument_quote_list(hk, 2, 0, 5))
+            check(g, "get_minute_time_data", lambda: c.get_minute_time_data(hk, "00700"))
+            check(g, "get_transaction_data", lambda: c.get_transaction_data(hk, "00700", 0, 5))
     mac = _try_client(lambda: MacExClient.from_best_host(timeout=10))
     if mac is not None:
         mkt = int(ExMarket.HK_MAIN_BOARD)
         with mac:
             check(g, "mac goods_count", lambda: mac.goods_count(mkt))
             check(g, "mac goods_list", lambda: mac.goods_list(mkt, count=10))
+            check(g, "mac goods_quotes", lambda: mac.goods_quotes([(mkt, "00700")]))
+            check(g, "mac goods_quotes_list", lambda: mac.goods_quotes_list(mkt, count=5))
+            check(g, "mac goods_kline", lambda: mac.goods_kline(mkt, "00700", count=5))
+            check(g, "mac goods_tick_chart", lambda: mac.goods_tick_chart(mkt, "00700"))
+            check(g, "mac goods_transaction", lambda: mac.goods_transaction(mkt, "00700"))
+            check(g, "mac goods_chart_sampling", lambda: mac.goods_chart_sampling(mkt, "00700"))
 
 
 def run_f10() -> None:
@@ -275,6 +306,8 @@ def run_f10() -> None:
     check(g, "cache_list(ly)", lambda: f.cache_list(code, "ly"))
     check(g, "detail", lambda: f.detail("1", "1"))
     check(g, "topic_compare", lambda: f.topic_compare(code, "1104"))
+    check(g, "allotment_dates", lambda: f.allotment_dates("000001"))
+    check(g, "allotment_details", lambda: f.allotment_details("000001", "20200101"))
 
     ga = "AltF10"
     a = AltF10Client(timeout=10)

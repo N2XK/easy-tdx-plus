@@ -7,6 +7,7 @@ import struct
 from datetime import date, time
 
 from ..._binary import unpack_from
+from ...codec.datetime_ import coerce_date
 from ...codec.mac_frame import build_mac_request
 from ...commands.base import BaseCommand
 from ..models import MacTick, MacTickChart
@@ -27,12 +28,13 @@ class SymbolTickChartCmd(BaseCommand[MacTickChart]):
         self,
         market: int,
         code: str,
-        query_date: date | None = None,
+        query_date: date | int | str | None = None,
     ) -> None:
         self._market = market
         self._code = code
-        if query_date is not None:
-            self._ymd = query_date.year * 10000 + query_date.month * 100 + query_date.day
+        qd = coerce_date(query_date)
+        if qd is not None:
+            self._ymd = qd.year * 10000 + qd.month * 100 + qd.day
         else:
             self._ymd = 0
 

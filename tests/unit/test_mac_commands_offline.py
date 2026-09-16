@@ -232,3 +232,21 @@ def test_download_file_raises_when_size_zero(monkeypatch) -> None:
     c = MacClient("127.0.0.1")
     with pytest.raises(TdxCommandError):
         c.download_file("zhb.zip")
+
+
+def test_coerce_date_and_query_date_int() -> None:
+    """query_date 接受 date/int/str，避免 int 触发 AttributeError。"""
+    import struct
+    from datetime import date
+
+    from easy_tdx.codec.datetime_ import coerce_date
+    from easy_tdx.mac.commands.symbol_transaction import SymbolTransactionCmd
+
+    assert coerce_date(None) is None
+    assert coerce_date(date(2026, 9, 16)) == date(2026, 9, 16)
+    assert coerce_date(20260916) == date(2026, 9, 16)
+    assert coerce_date("2026-09-16") == date(2026, 9, 16)
+
+    for qd in (20260916, "20260916", date(2026, 9, 16)):
+        req = SymbolTransactionCmd(1, "600519", query_date=qd).build_request()
+        assert struct.pack("<I", 20260916) in req

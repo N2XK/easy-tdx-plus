@@ -384,11 +384,12 @@ class MacExClient:
         self,
         market: int,
         code: str,
-        query_date: date | None = None,
+        query_date: date | int | str | None = None,
         start: int = 0,
         count: int = 2000,
     ) -> pd.DataFrame:
-        """获取逐笔成交数据。
+        """获取逐笔成交数据（期货/美股；**港股此命令返回空**，港股请用
+        ``ExTdxClient.get_transaction_data``）。
 
         Parameters
         ----------
@@ -702,7 +703,7 @@ class AsyncMacExClient:
         self,
         market: int,
         code: str,
-        query_date: date | None = None,
+        query_date: date | int | str | None = None,
         start: int = 0,
         count: int = 2000,
     ) -> pd.DataFrame:

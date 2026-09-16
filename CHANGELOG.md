@@ -64,6 +64,10 @@
 
 ### Fixed
 
+- **`query_date` 传 int/str 报 `AttributeError`**：MAC-EX `goods_transaction`/`goods_tick_chart` 现用
+  `codec.datetime_.coerce_date` 归一化（支持 `date`/`YYYYMMDD`/字符串）。
+- **`get_company_info_content` 语义澄清**：签名为 `(market, code, filename, offset, length)`，
+  filename 需取自 `get_company_info_category`（verify_all 已按此修正）。
 - **`AltF10Client` 继承的主网关入口全部 503**：`CWServ.*/CWSearch.*/HQServ.*` 在 tdxhub 未注册；
   现前置拦截并抛 `TdxCommandError`（提示改用 `F10Client`），不再返回晦涩的 503。
 - **`IcfqsClient.topic_list` 恒返回空**：此前把 `category|setcode` 拼成单个参数；现按单分类选择器调用，
@@ -126,7 +130,7 @@
 ### CI / Tests
 
 - 深度排查补充：本地 `.day`/扩展 `.day`/复权因子/`0x124A`/MAC 文件/扩展逐笔与K线等 9 项修复；
-  离线单测 390、全接口实测 164/164、联网集成 13、sync/async 12 组逐位对等。
+  离线单测 392、全接口实测 182/182、联网集成 13、sync/async 12 组逐位对等。
 
 - CI：py3.10/3.12/3.13；`mypy`/`ruff` 阻断；覆盖率 `fail_under=50`。
 - 单元测试覆盖协议编解码、离线解析、公式、CLI（mock）等；集成测试（`XMTDX_LIVE=1`）。

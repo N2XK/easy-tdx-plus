@@ -104,6 +104,47 @@ def _today_in_shanghai() -> int:
     return int(datetime.now(_SHANGHAI_TZ).strftime("%Y%m%d"))
 
 
+def _paginate(
+    fetch: Callable[[int, int], pd.DataFrame],
+    count: int,
+    max_pages: int = 256,
+) -> pd.DataFrame:
+    """通用分页：反复调用 fetch(start, count) 直到返回空页或不足一页。"""
+    frames: list[pd.DataFrame] = []
+    start = 0
+    for _ in range(max_pages):
+        page = fetch(start, count)
+        if page is None or page.empty:
+            break
+        frames.append(page)
+        start += len(page)
+        if len(page) < count:
+            break
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+async def _paginate_async(
+    fetch: Callable[[int, int], Awaitable[pd.DataFrame]],
+    count: int,
+    max_pages: int = 256,
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    start = 0
+    for _ in range(max_pages):
+        page = await fetch(start, count)
+        if page is None or page.empty:
+            break
+        frames.append(page)
+        start += len(page)
+        if len(page) < count:
+            break
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def _looks_like_index(market: Market, code: str) -> bool:
     """按市场与代码前缀判断是否为指数（用于 K 线自动路由）。"""
     if market == Market.SH:
@@ -929,6 +970,10 @@ class TdxClient:
             return pd.DataFrame()
         out = pd.concat(frames, ignore_index=True)
         return out.sort_values("datetime").reset_index(drop=True)
+
+    def get_security_features_all(self, count: int = 2000) -> pd.DataFrame:
+        """获取全部证券扩展特征（0x0452，特殊品种涨跌停限制表等），自动分页。"""
+        return _paginate(lambda s, c: self.get_security_features(s, c), count)
 
     # ------------------------------------------------------------------ #
     # 财务 / 公司
@@ -1908,20 +1953,16 @@ class AsyncTdxClient:
     async def get_history_transaction_all(
         self, market: Market, code: str, date: int, count: int = 800
     ) -> pd.DataFrame:
-        frames: list[pd.DataFrame] = []
-        start = 0
-        while True:
-            page = await self.get_history_transaction_data(market, code, date, start, count)
-            if page is None or page.empty:
-                break
-            frames.append(page)
-            start += len(page)
-            if len(page) < count:
-                break
-        if not frames:
-            return pd.DataFrame()
-        out = pd.concat(frames, ignore_index=True)
+        out = await _paginate_async(
+            lambda s, c: self.get_history_transaction_data(market, code, date, s, c), count
+        )
+        if out.empty:
+            return out
         return out.sort_values("datetime").reset_index(drop=True)
+
+    async def get_security_features_all(self, count: int = 2000) -> pd.DataFrame:
+        """获取全部证券扩展特征（0x0452），自动分页。"""
+        return await _paginate_async(lambda s, c: self.get_security_features(s, c), count)
 
     async def get_xdxr_info(self, market: Market, code: str) -> pd.DataFrame:
         return _to_df(await self._execute(GetXdxrInfoCmd(market, code)))

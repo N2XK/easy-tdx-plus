@@ -304,3 +304,44 @@ def test_async_get_history_transaction_all_paginates(monkeypatch: pytest.MonkeyP
     df = asyncio.run(c.get_history_transaction_all(Market.SZ, "000001", 20240102, count=10))
     assert len(df) == 10
     assert df["datetime"].is_monotonic_increasing
+
+
+def test_paginate_helper() -> None:
+    from easy_tdx.client import _paginate
+
+    pages = {0: pd.DataFrame({"a": [1, 2]}), 2: pd.DataFrame({"a": [3]})}
+
+    def fetch(start: int, count: int) -> pd.DataFrame:
+        return pages.get(start, pd.DataFrame({"a": []}))
+
+    out = _paginate(fetch, 2)
+    assert out["a"].tolist() == [1, 2, 3]
+    assert _paginate(lambda s, c: pd.DataFrame({"a": []}), 2).empty
+
+
+def test_paginate_async_helper() -> None:
+    from easy_tdx.client import _paginate_async
+
+    pages = {0: pd.DataFrame({"a": [1, 2]}), 2: pd.DataFrame({"a": [3]})}
+
+    async def fetch(start: int, count: int) -> pd.DataFrame:
+        return pages.get(start, pd.DataFrame({"a": []}))
+
+    out = asyncio.run(_paginate_async(fetch, 2))
+    assert out["a"].tolist() == [1, 2, 3]
+
+
+def test_get_security_features_all_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = _client()
+    calls: list[int] = []
+
+    def fake(start: int, count: int = 2000) -> pd.DataFrame:
+        calls.append(start)
+        if start == 0:
+            return pd.DataFrame({"code": [f"{i:06d}" for i in range(count)]})
+        return pd.DataFrame({"code": ["000001"]})
+
+    monkeypatch.setattr(c, "get_security_features", fake)
+    df = c.get_security_features_all(count=2000)
+    assert calls == [0, 2000]
+    assert len(df) == 2001

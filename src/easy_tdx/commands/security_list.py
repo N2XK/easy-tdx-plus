@@ -18,15 +18,18 @@ _RECORD_SIZE = 29
 class GetSecurityListCmd(BaseCommand[list[SecurityInfo]]):
     """获取指定市场从 start 开始的证券列表。"""
 
-    def __init__(self, market: Market, start: int) -> None:
+    def __init__(self, market: Market, start: int, count: int = 1000) -> None:
         self.market = market
         self.start = start
+        self.count = count
 
     def build_request(self) -> bytes:
-        # Header (12 bytes) + Payload (6 bytes) = 18 bytes
-        # Payload: Market(H), Start(H), Unknown(H)=0
-        header = bytes.fromhex("0c0118640101060006005004".replace(" ", ""))
-        return header + struct.pack("<HHH", int(self.market), self.start, 0)
+        # header(12) + payload: market(u16) + start(u32) + count(u32) + zero(u32) = 14
+        # 注意：长度字段 = payload + 2（用旧版 0x0450 短包会致同连接重复调用失步）
+        payload = struct.pack("<HIII", int(self.market), self.start, self.count, 0)
+        pkg_len = len(payload) + 2
+        header = struct.pack("<HIHH", 0x010C, 0x01010008, pkg_len, pkg_len)
+        return header + struct.pack("<H", 0x044D) + payload
 
     def parse_response(self, body: bytes) -> list[SecurityInfo]:
         (num,) = unpack_from("<H", body, 0, "security_list header")
@@ -39,10 +42,10 @@ class GetSecurityListCmd(BaseCommand[list[SecurityInfo]]):
                 code_bytes,
                 volunit,
                 name_bytes,
-                _unknown1,    # 4字节，含义未明
+                _unknown1,  # 4字节，含义未明
                 decimal_point,
                 pre_close_raw,
-                _unknown2,    # 4字节，含义未明
+                _unknown2,  # 4字节，含义未明
             ) = struct.unpack("<6sH8s4sBI4s", raw)
 
             code = code_bytes.decode("utf-8", errors="replace").rstrip("\x00")

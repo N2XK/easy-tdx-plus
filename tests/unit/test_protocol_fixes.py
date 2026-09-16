@@ -19,8 +19,20 @@ def test_security_bars_exact_layout():
     # Payload: 0x052D, 1 (Market.SH), "600000", 4 (KlineCategory.DAY), 1, 0 (start), 10, 0, 0, 0
     expected = struct.pack(
         "<HIHHHH6sHHHHIIH",
-        0x010C, 0x01016408, 0x001C, 0x001C,
-        0x052D, 1, b"600000", 4, 1, 0, 10, 0, 0, 0
+        0x010C,
+        0x01016408,
+        0x001C,
+        0x001C,
+        0x052D,
+        1,
+        b"600000",
+        4,
+        1,
+        0,
+        10,
+        0,
+        0,
+        0,
     )
     assert req == expected
     assert len(req) == 38
@@ -34,21 +46,35 @@ def test_history_fund_flow_exact_layout():
     # Payload: 0x052D, 1 (Market.SH), "600000", 22, 1, 0, 10, 0, 0, 0
     expected = struct.pack(
         "<HIHHHH6sHHHHIIH",
-        0x010C, 0x01016408, 0x001C, 0x001C,
-        0x052D, 1, b"600000", 22, 1, 0, 10, 0, 0, 0
+        0x010C,
+        0x01016408,
+        0x001C,
+        0x001C,
+        0x052D,
+        1,
+        b"600000",
+        22,
+        1,
+        0,
+        10,
+        0,
+        0,
+        0,
     )
     assert req == expected
     assert len(req) == 38
 
 
 def test_security_list_request_length():
-    """验证证券列表请求包载荷长度为 6 字节。"""
+    """验证证券列表请求使用 0x044d + <HIII>，长度字段 = payload+2。"""
     cmd = GetSecurityListCmd(Market.SH, 0)
     req = cmd.build_request()
-    # Header 12 + Payload 6 = 18
-    assert len(req) == 18
-    payload_len = struct.unpack("<H", req[6:8])[0]
-    assert payload_len == 6
+    assert req[10:12] == b"\x4d\x04"  # cmd 0x044d
+    payload = req[12:]
+    assert len(payload) == 14  # market(2) + start(4) + count(4) + zero(4)
+    assert struct.unpack("<H", req[6:8])[0] == len(payload) + 2
+    market, start, count, zero = struct.unpack("<HIII", payload)
+    assert (market, start, count, zero) == (1, 0, 1000, 0)
 
 
 def test_security_quotes_limit_mapping():
@@ -56,16 +82,16 @@ def test_security_quotes_limit_mapping():
     from easy_tdx.codec.price import put_price
 
     cmd = GetSecurityQuotesCmd([(Market.SH, "600000")])
-    
+
     # 构造响应报文
     body = bytearray(b"\x00\x00")
     body.extend(struct.pack("<H", 1))
-    
+
     # Record: Market(B), Code(6s), Active1(H) + ...
     body.extend(struct.pack("<B6sH", 1, b"600000", 0))
-    
+
     body.extend(put_price(1010))  # price_raw
-    body.extend(put_price(-5))    # last_close_diff
+    body.extend(put_price(-5))  # last_close_diff
     body.extend(put_price(0))
     body.extend(put_price(0))
     body.extend(put_price(0))
@@ -86,7 +112,7 @@ def test_security_quotes_limit_mapping():
     body.extend(put_price(0))
     body.extend(put_price(0))
     body.extend(struct.pack("<hH", 0, 0))
-    
+
     quotes = cmd.parse_response(bytes(body))
     q = quotes[0]
     assert q.limit_up is None
@@ -120,18 +146,19 @@ def test_compute_price_limits_for_indices():
 
 def test_compute_price_limits_for_newly_listed_stocks():
     """上市初期限价窗口应返回 None。"""
-    assert compute_price_limits(
-        Market.SH, "600001", "主板新股", 10.0, listed_days=5
-    ) == (None, None)
-    assert compute_price_limits(
-        Market.SH, "600001", "主板新股", 10.0, listed_days=6
-    ) == (11.0, 9.0)
-    assert compute_price_limits(
-        Market.BJ, "920002", "北交所新股", 84.36, listed_days=1
-    ) == (None, None)
-    assert compute_price_limits(
-        Market.BJ, "920002", "北交所新股", 84.36, listed_days=2
-    ) == (109.67, 59.05)
+    assert compute_price_limits(Market.SH, "600001", "主板新股", 10.0, listed_days=5) == (
+        None,
+        None,
+    )
+    assert compute_price_limits(Market.SH, "600001", "主板新股", 10.0, listed_days=6) == (11.0, 9.0)
+    assert compute_price_limits(Market.BJ, "920002", "北交所新股", 84.36, listed_days=1) == (
+        None,
+        None,
+    )
+    assert compute_price_limits(Market.BJ, "920002", "北交所新股", 84.36, listed_days=2) == (
+        109.67,
+        59.05,
+    )
 
 
 def test_history_fund_flow_uses_uint32_volume_words():

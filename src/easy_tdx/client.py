@@ -45,18 +45,17 @@ from .commands.index_info import GetIndexInfoCmd
 from .commands.index_momentum import GetIndexMomentumCmd
 from .commands.minute_aux import GetMinuteAuxCmd, resolve_selector
 from .commands.minute_time import GetHistoryMinuteTimeDataCmd
+from .commands.quotes_encrypt import GetQuotesEncryptCmd
 from .commands.report_file import GetReportFileCmd
 from .commands.security_bars import GetIndexBarsCmd, GetSecurityBarsCmd
 from .commands.security_count import GetSecurityCountCmd
 from .commands.security_feature import GetSecurityFeatureCmd
 from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
-from .commands.quotes_encrypt import GetQuotesEncryptCmd
 from .commands.sparkline import GetSparklineCmd
 from .commands.top_board import GetTopBoardCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
 from .commands.volume_profile import GetVolumeProfileCmd
-from .commands.xdxr_info import GetXdxrInfoCmd
 from .commands.xdxr_info import GetXdxrInfoCmd
 from .config import (
     get_best_host,
@@ -469,6 +468,14 @@ class TdxClient:
             self._conn.start_heartbeat(self._heartbeat_interval)
         save_best_host(host)
 
+    def _reconnect(self) -> None:
+        """关闭并重建到当前主机的连接。"""
+        self._conn.close()
+        self._conn = TdxConnection(self._host, self._port, self._timeout)
+        self._conn.connect()
+        if self._heartbeat_interval > 0:
+            self._conn.start_heartbeat(self._heartbeat_interval)
+
     def _execute_std(self, cmd: "BaseCommand[_T]", *, require_nonempty: bool = False) -> _T:
         """执行标准协议数据命令，自动避开不支持该命令的服务器。
 
@@ -829,7 +836,10 @@ class TdxClient:
         """小走势图（0x0fd1）：轻量价格序列。
 
         返回含 ``price`` 列的 DataFrame，``base_price`` 存于 ``df.attrs``。
+
+        注：该命令在单个 TCP 连接上仅响应一次，故每次调用前重建连接。
         """
+        self._reconnect()
         series = self._execute_std(
             GetSparklineCmd(market, code, selector, window), require_nonempty=True
         )
@@ -1626,7 +1636,9 @@ class AsyncTdxClient:
 
     async def get_security_features(self, start: int = 0, count: int = 2000) -> pd.DataFrame:
         """证券扩展特征（0x0452）异步版。"""
-        return _to_df(await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
+        return _to_df(
+            await self._execute_std(GetSecurityFeatureCmd(start, count), require_nonempty=True)
+        )
 
     async def get_quotes_encrypt(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """加密批量行情（0x0547）异步版。"""
@@ -1756,7 +1768,10 @@ class AsyncTdxClient:
     async def get_sparkline(
         self, market: Market, code: str, selector: int = 1, window: int = 20
     ) -> pd.DataFrame:
-        """小走势图（0x0fd1）异步版。"""
+        """小走势图（0x0fd1）异步版（该命令每连接仅响应一次，调用前重建连接）。"""
+        await self._conn.close()
+        self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+        await self._conn.connect()
         series = await self._execute_std(
             GetSparklineCmd(market, code, selector, window), require_nonempty=True
         )

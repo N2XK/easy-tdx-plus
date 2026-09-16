@@ -20,6 +20,7 @@ from .commands.get_minute_time import (
     GetExMinuteTimeDataCmd,
 )
 from .commands.get_server_info import GetExServerInfoCmd
+from .commands.get_table import GetExTableCmd
 from .commands.get_transaction import (
     GetExHistoryTransactionDataCmd,
     GetExTransactionDataCmd,
@@ -31,6 +32,7 @@ from .models import (
     ExMarketInfo,
     ExMinuteBar,
     ExServerInfo,
+    ExTableChunk,
     ExTransactionRecord,
 )
 from .transport.async_ import AsyncExTdxConnection
@@ -137,6 +139,10 @@ class ExTdxClient:
     def get_server_info(self) -> ExServerInfo:
         """获取扩展市场服务器信息（0x2455）。"""
         return self._execute(GetExServerInfoCmd())
+
+    def get_table(self, start: int = 0) -> ExTableChunk:
+        """获取扩展市场表格（0x2422，文本分块）。"""
+        return self._execute(GetExTableCmd(start))
 
     def get_instrument_count(self) -> int:
         """获取扩展行情商品总数。"""
@@ -360,6 +366,10 @@ class AsyncExTdxClient:
     async def get_server_info(self) -> ExServerInfo:
         """获取扩展市场服务器信息（0x2455）异步版。"""
         return await self._execute(GetExServerInfoCmd())
+
+    async def get_table(self, start: int = 0) -> ExTableChunk:
+        """获取扩展市场表格（0x2422）异步版。"""
+        return await self._execute(GetExTableCmd(start))
 
     async def get_instrument_count(self) -> int:
         return await self._execute(GetExInstrumentCountCmd())

@@ -1,6 +1,7 @@
 """7615 F10 / TQLEX 模块。"""
 
 from .async_client import AsyncF10Client
+from .async_icfqs import AsyncIcfqsClient
 from .client import F10Client, split_code
 from .entries import DEFAULT_LIMIT_BOARD_BASE_URL, DEFAULT_TQLEX_BASE_URL
 from .icfqs import (
@@ -19,6 +20,7 @@ __all__ = [
     "F10ResultSet",
     "TqlexTransport",
     "IcfqsClient",
+    "AsyncIcfqsClient",
     "parse_tqlex_response",
     "split_code",
     "DEFAULT_TQLEX_BASE_URL",

@@ -51,6 +51,7 @@ from .commands.security_count import GetSecurityCountCmd
 from .commands.security_feature import GetSecurityFeatureCmd
 from .commands.security_list import GetSecurityListCmd
 from .commands.security_quotes import GetSecurityQuotesCmd
+from .commands.quotes_encrypt import GetQuotesEncryptCmd
 from .commands.sparkline import GetSparklineCmd
 from .commands.top_board import GetTopBoardCmd
 from .commands.transaction import GetHistoryTransactionDataCmd, GetTransactionDataCmd
@@ -612,6 +613,10 @@ class TdxClient:
     def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """批量获取实时五档行情（最多80只/次）。"""
         return _to_df(self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
+
+    def get_quotes_encrypt(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """加密批量行情（0x0547，最多 100 只，含完整五档）。"""
+        return _to_df(self._execute_std(GetQuotesEncryptCmd(stocks), require_nonempty=True))
 
     def get_price_limits(
         self, market: Market, code: str, name: str, pre_close: float
@@ -1621,9 +1626,11 @@ class AsyncTdxClient:
 
     async def get_security_features(self, start: int = 0, count: int = 2000) -> pd.DataFrame:
         """证券扩展特征（0x0452）异步版。"""
-        return _to_df(
-            await self._execute_std(GetSecurityFeatureCmd(start, count), require_nonempty=True)
-        )
+        return _to_df(await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
+
+    async def get_quotes_encrypt(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """加密批量行情（0x0547）异步版。"""
+        return _to_df(await self._execute_std(GetQuotesEncryptCmd(stocks), require_nonempty=True))
 
     async def get_index_momentum(self, market: Market, code: str) -> pd.DataFrame:
         """指数动量（0x051c）异步版。"""

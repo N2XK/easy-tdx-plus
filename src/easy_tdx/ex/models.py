@@ -149,3 +149,13 @@ class ExServerInfo:
     time_now: str
     server_name: str
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
+class ExTableChunk:
+    """扩展市场表格分块（0x2422 / 0x2423）。"""
+
+    start: int
+    count: int
+    content: str
+    _raw: bytes = field(default=b"", repr=False, compare=False)

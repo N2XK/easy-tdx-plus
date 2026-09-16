@@ -96,3 +96,27 @@ class VolumeProfile:
     asks: list[tuple[float, int]] = field(default_factory=list)
     profiles: list[VolumeProfileItem] = field(default_factory=list)
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
+class EncryptedQuote:
+    """加密批量行情条目（0x0547）。"""
+
+    market: int
+    code: str
+    active: int
+    close: float
+    pre_close: float
+    open: float
+    high: float
+    low: float
+    vol: int
+    cur_vol: int
+    amount: float
+    in_vol: int
+    out_vol: int
+    s_amount: int
+    open_amount: int
+    bids: list[tuple[float, int]] = field(default_factory=list)
+    asks: list[tuple[float, int]] = field(default_factory=list)
+    _raw: bytes = field(default=b"", repr=False, compare=False)

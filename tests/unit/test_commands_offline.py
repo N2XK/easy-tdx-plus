@@ -154,6 +154,11 @@ def test_security_quotes_parse():
     assert hasattr(q, "rise_speed")
     assert len(q._raw) > 0
 
+    # 交易状态字被保留（0x053e 尾部 u16，含停牌位）
+    assert hasattr(q, "trading_status")
+    assert isinstance(q.trading_status, int)
+    assert q.is_suspended == bool(q.trading_status & 0x20)
+
     # fixed values from frozen fixture
     assert q.unknown_2 == -1
     assert q.unknown_3 == 22694
@@ -397,3 +402,51 @@ def test_company_info_content_parse():
     assert len(text) == 8070
     assert "600000" in text
     assert "浦发银行" in text
+
+
+def test_suspended_filter_logic():
+    from easy_tdx.models.quote import TRADING_STATUS_SUSPENDED, SecurityQuote
+
+    base = dict(
+        market=__import__("easy_tdx.models.enums", fromlist=["Market"]).Market.SH,
+        code="600000",
+        price=1.0,
+        pre_close=1.0,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        vol=0.0,
+        cur_vol=0.0,
+        amount=0.0,
+        s_vol=0.0,
+        b_vol=0.0,
+        active1=0,
+        active2=0,
+        bid1=0.0,
+        bid_vol1=0.0,
+        bid2=0.0,
+        bid_vol2=0.0,
+        bid3=0.0,
+        bid_vol3=0.0,
+        bid4=0.0,
+        bid_vol4=0.0,
+        bid5=0.0,
+        bid_vol5=0.0,
+        ask1=0.0,
+        ask_vol1=0.0,
+        ask2=0.0,
+        ask_vol2=0.0,
+        ask3=0.0,
+        ask_vol3=0.0,
+        ask4=0.0,
+        ask_vol4=0.0,
+        ask5=0.0,
+        ask_vol5=0.0,
+        rise_speed=0.0,
+        limit_up=None,
+        limit_down=None,
+    )
+    assert SecurityQuote(**base, trading_status=0).is_suspended is False
+    assert SecurityQuote(**base, trading_status=2).is_suspended is False
+    assert SecurityQuote(**base, trading_status=TRADING_STATUS_SUSPENDED).is_suspended is True
+    assert SecurityQuote(**base, trading_status=0x4010 | 0x20).is_suspended is True

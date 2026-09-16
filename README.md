@@ -467,7 +467,8 @@ df = read_daily_bars_df(filepath)         # DataFrame 快速路径（numpy 向�
 | `get_security_list(market, start)` | 证券列表（分页） |
 | `get_security_list_all()` | 沪深 A 股完整列表（含行业） |
 | `get_fund_list(market)` | 基金列表（ETF/LOF/REITs/分级/债券） |
-| `get_security_quotes(stocks)` | 批量五档行情 |
+| `get_security_quotes(stocks)` | 批量五档行情（0x053e，>80 只自动分批；含 `trading_status` 状态字） |
+| `get_suspended_quotes(stocks)` | 从给定代码中筛出停牌标的（状态位 `0x20`） |
 | `get_security_bars(market, code, ...)` | 个股 K 线 |
 | `get_index_bars(market, code, ...)` | 指数 K 线 |
 | `get_bars(market, code, ...)` | K 线（按代码自动路由股票/指数） |

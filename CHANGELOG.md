@@ -9,7 +9,8 @@
 
 ### Added
 
-- **标准协议**：`get_auction_series`（集合竞价过程快照 0x056a，秒级，支持按日期取历史）；
+- **标准协议**：`get_security_quotes` 支持 >80 只自动分批，并暴露 `trading_status` 交易状态字；
+  新增 `get_suspended_quotes`（按 `0x20` 停牌位筛选）。`get_auction_series`（集合竞价过程快照 0x056a，秒级，支持按日期取历史）；
   K 线便利方法 `get_bars` / `get_bars_range` / `get_k_data`；`get_history_transaction_all`（历史逐笔全量分页）；
   `get_security_features_all`；`get_trading_calendar` / `get_trading_days`；`get_formula`。
 - **交易日历**（`easy_tdx.TradingCalendar`）：由指数日线构建，提供 `is_trading_day` / `prev_` / `next_trading_day` /
@@ -63,6 +64,8 @@
 
 ### Fixed
 
+- **0x053e 交易状态位被丢弃**：`GetSecurityQuotesCmd` 解析出的尾部状态字（停牌位 `0x20`）未写入模型，
+  现映射为 `SecurityQuote.trading_status` 并提供 `is_suspended`。
 - **官方下载完整性**：`offline.official._download` 此前未校验字节数，连接中断/截断的部分文件会被
   `replace` 成"完整文件"；现按 `Content-Length`/`Content-Range` 校验，不足则保留 `.part` 供续传。
 - **能力缓存**：`probe_capabilities(features=subset)` 不再用子集**覆盖**全量快照（改为合并）；

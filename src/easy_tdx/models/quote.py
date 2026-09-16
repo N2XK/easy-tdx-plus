@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 
 from .enums import Market
 
+# 0x053e 交易状态字（尾部 u16）的位标志，语义来自社区逆向。
+TRADING_STATUS_SUSPENDED = 0x20  # 停牌
+
 
 @dataclass
 class SecurityQuote:
@@ -63,6 +66,9 @@ class SecurityQuote:
     limit_up: float | None  # 涨停价（业务规则计算）
     limit_down: float | None  # 跌停价（业务规则计算）
 
+    # 交易状态原始字（0x053e 尾部 u16）：社区逆向，含停牌等状态位（见 TRADING_STATUS_*）
+    trading_status: int = 0
+
     # 未知字段：买卖量之后的两个变长整数（保留供进一步分析）
     unknown_2: int = field(default=0, repr=False)  # 未知变长整数 2
     unknown_3: int = field(default=0, repr=False)  # 未知变长整数 3
@@ -78,3 +84,8 @@ class SecurityQuote:
 
     # 原始字节（该股票记录切片）
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+    @property
+    def is_suspended(self) -> bool:
+        """是否停牌（依据 ``trading_status`` 的停牌位，社区逆向）。"""
+        return bool(self.trading_status & TRADING_STATUS_SUSPENDED)

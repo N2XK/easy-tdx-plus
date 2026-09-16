@@ -99,6 +99,7 @@ from .models.finance import (
     FinancialFileInfo,
     FinancialRecord,
 )
+from .models.quote import TRADING_STATUS_SUSPENDED
 from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
@@ -797,8 +798,31 @@ class TdxClient:
         return _to_df(funds)
 
     def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
-        """批量获取实时五档行情（最多80只/次）。"""
-        return _to_df(self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
+        """批量获取实时五档行情（0x053e，超过 80 只自动分批）。
+
+        返回含 ``trading_status``（交易状态字，停牌位 ``0x20``）与
+        ``rise_speed`` / ``limit_up`` / ``limit_down`` 等字段。
+        """
+        return self._quotes_paginated(stocks)
+
+    def get_suspended_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """从给定代码中筛出**停牌**标的（依据 0x053e 交易状态位 ``0x20``）。"""
+        df = self.get_security_quotes(stocks)
+        if df.empty or "trading_status" not in df.columns:
+            return df
+        mask = (df["trading_status"].astype("int64") & TRADING_STATUS_SUSPENDED) != 0
+        return df[mask].reset_index(drop=True)
+
+    def _quotes_paginated(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        if not stocks:
+            return pd.DataFrame()
+        frames = [
+            _to_df(
+                self._execute_std(GetSecurityQuotesCmd(stocks[i : i + 80]), require_nonempty=True)
+            )
+            for i in range(0, len(stocks), 80)
+        ]
+        return frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
 
     def get_quotes_encrypt(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
         """加密批量行情（0x0547，最多 100 只，含完整五档）。"""
@@ -2022,7 +2046,27 @@ class AsyncTdxClient:
         return _to_df(all_stocks)
 
     async def get_security_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
-        return _to_df(await self._execute_std(GetSecurityQuotesCmd(stocks), require_nonempty=True))
+        """批量获取实时五档行情（0x053e，超过 80 只自动分批；异步版）。"""
+        if not stocks:
+            return pd.DataFrame()
+        frames = []
+        for i in range(0, len(stocks), 80):
+            frames.append(
+                _to_df(
+                    await self._execute_std(
+                        GetSecurityQuotesCmd(stocks[i : i + 80]), require_nonempty=True
+                    )
+                )
+            )
+        return frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
+
+    async def get_suspended_quotes(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """从给定代码中筛出停牌标的（0x053e 状态位 ``0x20``；异步版）。"""
+        df = await self.get_security_quotes(stocks)
+        if df.empty or "trading_status" not in df.columns:
+            return df
+        mask = (df["trading_status"].astype("int64") & TRADING_STATUS_SUSPENDED) != 0
+        return df[mask].reset_index(drop=True)
 
     async def get_price_limits(
         self, market: Market, code: str, name: str, pre_close: float

@@ -100,3 +100,22 @@ def test_live_auction_series() -> None:
         hist = c.get_auction_series(Market.SZ, "000001", date=20260814)
         assert len(hist) > 0
         assert hist["time"].iloc[0].hour == 9
+
+
+def test_live_trading_status_and_suspended() -> None:
+    """0x053e：交易状态字与停牌筛选；>80 只自动分批。"""
+    from easy_tdx.models.quote import TRADING_STATUS_SUSPENDED
+
+    with TdxClient.from_best_host(timeout=5.0) as c:
+        listing = c.get_security_list(Market.SH, 0)
+        codes = [(Market.SH, row["code"]) for _, row in listing.head(200).iterrows()]
+        df = c.get_security_quotes(codes)  # 200 只 -> 自动分 3 批
+        assert len(df) == len(codes)
+        assert "trading_status" in df.columns
+
+        susp = c.get_suspended_quotes(codes)
+        assert (
+            (susp["trading_status"].astype("int64") & TRADING_STATUS_SUSPENDED)
+            .eq(TRADING_STATUS_SUSPENDED)
+            .all()
+        )

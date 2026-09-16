@@ -129,8 +129,8 @@ class GetSecurityQuotesCmd(BaseCommand[list[SecurityQuote]]):
             bv5, pos = get_price(body, pos)
             av5, pos = get_price(body, pos)
 
-            # 尾部：2字节 H + 4个 get_price + 2字节 h + 2字节 H
-            (unknown_4,) = unpack_from("<H", body, pos, "security_quotes tail flag")
+            # 尾部：2字节 交易状态字（含停牌位 0x20）+ 4个 get_price + 2字节 h + 2字节 H
+            (trading_status,) = unpack_from("<H", body, pos, "security_quotes trading status")
             pos += 2
             unknown_5, pos = get_price(body, pos)
             unknown_6, pos = get_price(body, pos)
@@ -189,6 +189,7 @@ class GetSecurityQuotesCmd(BaseCommand[list[SecurityQuote]]):
                     rise_speed=rise_speed_raw / 100.0,
                     limit_up=None,
                     limit_down=None,
+                    trading_status=trading_status,
                     unknown_2=unknown_2,
                     unknown_3=unknown_3,
                     unknown_5=unknown_5,

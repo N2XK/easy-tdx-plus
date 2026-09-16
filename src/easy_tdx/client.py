@@ -62,7 +62,7 @@ from .config import (
 )
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily
 from .exceptions import TdxConnectionError, TdxDecodeError
-from .f10 import F10Client
+from .f10 import F10Client, IcfqsClient
 from .fund import is_fund
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
@@ -304,6 +304,7 @@ class TdxClient:
         self._conn = TdxConnection(host, port, timeout)
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
+        self._icfqs: IcfqsClient | None = None
         self._limiter: RateLimiter | None = RateLimiter() if rate_limit else None
         if self._limiter is not None:
             self._limiter.auto_detect_phase()
@@ -327,6 +328,13 @@ class TdxClient:
         if self._f10 is None:
             self._f10 = F10Client()
         return self._f10
+
+    @property
+    def icfqs(self) -> IcfqsClient:
+        """ICFQS 7615 客户端：龙虎榜 / 游资 / 每日复盘 / 题材（懒加载）。"""
+        if self._icfqs is None:
+            self._icfqs = IcfqsClient()
+        return self._icfqs
 
     # ------------------------------------------------------------------ #
     # 工厂方法：自动优选最低延迟服务器

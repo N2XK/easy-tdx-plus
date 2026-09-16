@@ -34,7 +34,7 @@ from .exceptions import (
     TdxError,
     TdxValidationError,
 )
-from .f10 import AsyncF10Client, F10Client, F10Response, F10ResultSet
+from .f10 import AsyncF10Client, F10Client, F10Response, F10ResultSet, IcfqsClient
 from .fund import classify_fund, is_fund
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
@@ -76,6 +76,7 @@ __all__ = [
     "AsyncF10Client",
     "F10Response",
     "F10ResultSet",
+    "IcfqsClient",
     "MacClient",
     "AsyncMacClient",
     "MacExClient",

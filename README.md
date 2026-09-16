@@ -510,6 +510,27 @@ funds = c.get_fund_list(Market.SH)
 - `validate_bars` / `check_bars`：OHLC 关系 / 非有限值 / 负量校验。
 - `to_tuples`：dataclass → tuple 快速输出路径。
 
+### 龙虎榜 / 游资 / 每日复盘 / 题材（ICFQS 7615）
+
+ICFQS 与 F10 共用 7615 TQLEX 网关（host 不同），由 `IcfqsClient` 提供：
+
+```python
+from easy_tdx import IcfqsClient
+
+c = IcfqsClient()                                   # 默认 121.37.193.4:7615
+c.topics_hot(); c.topics_new(); c.topics_top()      # 热点/新/龙头题材
+c.topics_events(); c.topic_search("芯片")            # 事件/搜索
+c.topic_stocks("881001", "1"); c.topic_rotation()   # 成分股/轮动
+
+hot = IcfqsClient("hot.icfqs.com:7615")             # 龙虎榜/复盘走 hot 网关
+hot.daily_review("rq")                              # 每日复盘
+hot.lhb_yyb_detail("东方财富证券股份有限公司", "20260801", "20260915")
+hot.lhb_detail("600519", "20260801", "20260915")    # 个股龙虎榜
+hot.lhb_yz_detail("600519", "20260801", "20260915") # 游资明细
+```
+
+`client.icfqs` 为 `TdxClient` 上的懒加载属性。
+
 ## 架构
 
 ```

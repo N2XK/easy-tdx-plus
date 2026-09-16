@@ -21,6 +21,18 @@ _DEFAULT_HEADERS = {
 }
 
 
+def _decode_json(raw_bytes: bytes, lenient: bool) -> Any:
+    text = raw_bytes.decode("utf-8-sig", errors="replace")
+    if not lenient:
+        return json.loads(text)
+    # ICFQS 等端点会在 JSON 前后附带非 JSON 前缀；从首个 { 起解析一个完整对象。
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("响应中未找到 JSON 对象")
+    parsed, _ = json.JSONDecoder().raw_decode(text[start:])
+    return parsed
+
+
 class TqlexTransport:
     """TQLEX HTTP 客户端。
 
@@ -29,6 +41,7 @@ class TqlexTransport:
         timeout: 单次请求超时秒数。
         retries: 网络错误时的重试次数。
         headers: 覆盖默认请求头。
+        lenient_json: 容忍响应中的非 JSON 前缀（ICFQS 端点需要）。
     """
 
     def __init__(
@@ -37,10 +50,12 @@ class TqlexTransport:
         timeout: float = 8.0,
         retries: int = 2,
         headers: dict[str, str] | None = None,
+        lenient_json: bool = False,
     ) -> None:
         self.base_url = base_url
         self.timeout = timeout
         self.retries = max(0, retries)
+        self.lenient_json = lenient_json
         self.headers = dict(_DEFAULT_HEADERS)
         if headers:
             self.headers.update(headers)
@@ -55,7 +70,7 @@ class TqlexTransport:
             try:
                 with urlopen(request, timeout=self.timeout) as response:
                     raw_bytes = response.read()
-                parsed = json.loads(raw_bytes.decode("utf-8-sig"))
+                parsed = _decode_json(raw_bytes, self.lenient_json)
                 if not isinstance(parsed, dict):
                     raise TdxConnectionError(f"TQLEX 返回非对象 JSON: {entry}")
                 return parsed

@@ -181,6 +181,11 @@ def _parse_gpcw_listing(
     return out
 
 
+def _normalize_financial_name(filename: str) -> str:
+    """财报文件名补全目录前缀（列表给的是裸名，服务器要求 tdxfin/ 前缀）。"""
+    return filename if "/" in filename else f"tdxfin/{filename}"
+
+
 def _write_zip_atomically(target: Path, data: bytes) -> bool:
     """校验 zip 魔数后原子写入；非 zip/空返回 False。"""
     if not data or not data.startswith(b"PK"):
@@ -1540,17 +1545,17 @@ class TdxClient:
         """从计算服务器下载财报 zip 文件。
 
         Args:
-            filename: 如 'tdxfin/gpcw20260331.zip'
+            filename: 如 'gpcw20260331.zip'（自动补 ``tdxfin/`` 前缀）或完整路径。
         """
         if host is None:
             host = get_calc_hosts()[0]
-        return self._download_from_host(host, filename)
+        return self._download_from_host(host, _normalize_financial_name(filename))
 
     def get_financial_records(self, filename: str, host: str | None = None) -> pd.DataFrame:
         """下载财报 zip 并解析为每只股票的记录列表。
 
         Args:
-            filename: 如 'tdxfin/gpcw20260331.zip'
+            filename: 如 'gpcw20260331.zip'（自动补 ``tdxfin/`` 前缀）或完整路径。
         """
         if host is None:
             host = get_calc_hosts()[0]
@@ -1614,7 +1619,7 @@ class TdxClient:
             if target.is_file() and target.stat().st_size > 0 and not overwrite:
                 written.append(target)
                 continue
-            fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
+            fetch_name = _normalize_financial_name(filename)
             if _write_zip_atomically(target, self.get_financial_file(fetch_name, host)):
                 written.append(target)
         return written
@@ -2326,7 +2331,7 @@ class AsyncTdxClient:
             if target.is_file() and target.stat().st_size > 0 and not overwrite:
                 written.append(target)
                 continue
-            fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
+            fetch_name = _normalize_financial_name(filename)
             data = await self.get_financial_file(fetch_name, host)
             if _write_zip_atomically(target, data):
                 written.append(target)
@@ -2724,7 +2729,7 @@ class AsyncTdxClient:
         """从计算服务器下载财报 zip 文件（异步）。"""
         if host is None:
             host = get_calc_hosts()[0]
-        return await self._async_download_from_host(host, filename)
+        return await self._async_download_from_host(host, _normalize_financial_name(filename))
 
     async def get_financial_records(self, filename: str, host: str | None = None) -> pd.DataFrame:
         """下载财报 zip 并解析为记录列表（异步）。"""

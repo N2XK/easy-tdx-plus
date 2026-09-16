@@ -1,8 +1,8 @@
-"""演示：批量下载季度历史财务（gpcw）并构造 point-in-time 面板。
+"""演示：批量下载季度历史财务（gpcw）并构造按报告期的财务面板（回测需自行按公告滞后）。
 
 - `TdxClient.download_financial_history(dir, start, end)`：从计算服务器按报告期区间
   批量下载 `gpcwYYYYMMDD.zip`（断点续传 + 原子写）。
-- `read_financial_history_panel(dir, codes)`：把多季度文件拼成 point-in-time 面板
+- `read_financial_history_panel(dir, codes)`：把多季度文件拼成按报告期的财务面板
   （`code / market / report_date / f0..fN`，每记录约 584 个字段）。
 
 用途：回测时按"报告期"取财务，避免前视偏差；服务器保留 1988 至今约 147 个季度。
@@ -25,7 +25,7 @@ with TdxClient.from_best_host() as c:
     paths = c.download_financial_history(DATA_DIR, 20230101, 20241231)
     print("本地季度文件:", [p.name for p in paths])
 
-# 3) 构造某只股票的 point-in-time 面板
+# 3) 构造某只股票按报告期的财务面板（回测需自行按公告滞后）
 panel = read_financial_history_panel(DATA_DIR, codes=["000001"])
 print("\n000001 面板行数:", len(panel), "报告期:", sorted(panel["report_date"].unique()))
 print(panel[["code", "market", "report_date"]].to_string(index=False))

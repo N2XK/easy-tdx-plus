@@ -60,9 +60,10 @@ def test_boll_band_width() -> None:
     s = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     out = boll(s, n=5, k=2.0)
     last = out.iloc[-1]
-    # 总体标准差 ddof=0 -> sqrt(2)
-    assert last["boll_upper"] == pytest.approx(3.0 + 2 * (2.0**0.5))
-    assert last["boll_lower"] == pytest.approx(3.0 - 2 * (2.0**0.5))
+    # 估算（样本）标准差 ddof=1 -> sqrt(2) * sqrt(5/4) = sqrt(2.5)（通达信 BOLL 语义）
+    sample_std = (2.0**0.5) * (5 / 4) ** 0.5
+    assert last["boll_upper"] == pytest.approx(3.0 + 2 * sample_std)
+    assert last["boll_lower"] == pytest.approx(3.0 - 2 * sample_std)
 
 
 def test_rsi_uptrend_is_100() -> None:

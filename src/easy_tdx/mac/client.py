@@ -6,7 +6,7 @@ import asyncio
 import time
 from dataclasses import asdict
 from types import TracebackType
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import pandas as pd
 
@@ -17,6 +17,10 @@ from ..config import get_best_host, get_mac_hosts, get_port, get_timeout, save_b
 from ..exceptions import TdxConnectionError
 from ..transport.async_ import AsyncTdxConnection
 from ..transport.sync import TdxConnection, ping_mac_all
+
+if TYPE_CHECKING:
+    from ..ex.mac_client import AsyncMacExClient, MacExClient
+
 from .commands import (
     BoardListCmd,
     BoardMembersQuotesCmd,
@@ -34,7 +38,6 @@ from .commands import (
     UnusualCmd,
 )
 from .commands.file_query import FileDownloadCmd, FileListCmd
-from .commands.goods_list import GoodsListCmd
 from .enums import Adjust, BoardType, Category, FilterType, Period, SortOrder, SortType
 from .models import (
     MacBar,
@@ -148,6 +151,7 @@ class MacClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._conn = TdxConnection(self._host, self._port, self._timeout)
+        self._mac_ex: MacExClient | None = None
 
     # ------------------------------------------------------------------ #
     # 工厂方法
@@ -200,6 +204,10 @@ class MacClient:
     def close(self) -> None:
         self._conn.stop_heartbeat()
         self._conn.close()
+        ex = self._mac_ex
+        if ex is not None:
+            ex.close()
+            self._mac_ex = None
 
     def disconnect(self) -> None:
         """Alias for close()."""
@@ -731,15 +739,27 @@ class MacClient:
         start: int = 0,
         count: int = 600,
     ) -> pd.DataFrame:
-        """获取扩展市场（期货/期权等）商品列表。
+        """获取扩展市场（期货/期权/港股/美股等）商品列表。
+
+        扩展市场数据在 **MAC-EX（7727）** 通道，本方法内部自动建立并复用一条
+        MAC-EX 连接（首次调用会测速选路）。
 
         Args:
-            market: 扩展市场代码（ExMarket 枚举值）。
-            start: 起始偏移。
-            count: 请求数量（最大 1000）。
+            market: 扩展市场代码（ExMarket 枚举值，如 ``ExMarket.HK_MAIN_BOARD``）。
+            start: 市场内起始偏移。
+            count: 请求数量。
         """
-        items = self._execute(GoodsListCmd(market, start, count))
-        return _to_df(items)
+        return self._ensure_mac_ex().goods_list(market, start, count)
+
+    def _ensure_mac_ex(self) -> MacExClient:
+        ex = self._mac_ex
+        if ex is None:
+            from ..ex.mac_client import MacExClient
+
+            ex = MacExClient.from_best_host(timeout=self._timeout)
+            ex.connect()
+            self._mac_ex = ex
+        return ex
 
 
 # ============================================================
@@ -773,6 +793,7 @@ class AsyncMacClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+        self._mac_ex: AsyncMacExClient | None = None
         self._execute_lock = asyncio.Lock()
         self._heartbeat_task: asyncio.Task[None] | None = None
 
@@ -826,6 +847,10 @@ class AsyncMacClient:
     async def close(self) -> None:
         await self._stop_heartbeat()
         await self._conn.close()
+        ex = self._mac_ex
+        if ex is not None:
+            await ex.close()
+            self._mac_ex = None
 
     async def disconnect(self) -> None:
         """Alias for close()."""
@@ -1252,5 +1277,12 @@ class AsyncMacClient:
         start: int = 0,
         count: int = 600,
     ) -> pd.DataFrame:
-        items = await self._execute(GoodsListCmd(market, start, count))
-        return _to_df(items)
+        """扩展市场商品列表（内部走 MAC-EX 7727 通道；异步版）。"""
+        ex = self._mac_ex
+        if ex is None:
+            from ..ex.mac_client import AsyncMacExClient
+
+            ex = AsyncMacExClient.from_best_host(timeout=self._timeout)
+            await ex.connect()
+            self._mac_ex = ex
+        return await ex.goods_list(market, start, count)

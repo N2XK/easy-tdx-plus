@@ -64,6 +64,12 @@
 
 ### Fixed
 
+- **财报文件名静默失败**：`get_financial_file`/`get_financial_records` 传裸文件名（如 `gpcw20260331.zip`）时
+  服务器返回 0 字节且不报错；现自动补 `tdxfin/` 前缀（与 `download_financial_history` 一致）。
+- **公式解释器统计口径**：`STD`/`VAR` 原用总体口径(ddof=0)，与通达信不符；现 `STD`/`VAR` 为估算(样本, ddof=1)，
+  新增 `STDP`/`VARP`(总体, ddof=0)，`STDDEV` 保持总体口径；`boll()` 指标同步为样本口径（通达信 BOLL 用 `STD`）。
+- **`MacClient.get_goods_list` 接错协议**：0x2562 需 MAC-EX(7727) 且记录解析不正确，导致必然超时；
+  现内部改走已验证的 MAC-EX `goods_list`（自动建连/复用/随 close 释放）。
 - **0x053e 交易状态位被丢弃**：`GetSecurityQuotesCmd` 解析出的尾部状态字（停牌位 `0x20`）未写入模型，
   现映射为 `SecurityQuote.trading_status` 并提供 `is_suspended`。
 - **官方下载完整性**：`offline.official._download` 此前未校验字节数，连接中断/截断的部分文件会被
@@ -92,6 +98,8 @@
 - 清理误提交的下载产物与失效脚本；旧版 `api_reference.md` / `field_mapping.md` 合并进 `docs/数据字典.md`。
 
 ### Docs
+
+- 历史财务面板表述由 "point-in-time" 更正为 "按报告期"，并说明回测需自行按公告滞后以避免前视偏差。
 
 - 新增 `docs/数据字典.md`（接口/命令/字段/口径）、`docs/能力矩阵.md`（成熟度与限制）、`docs/验证报告.md`、
   `docs/ROADMAP_补全方案.md`；README 增补快速上手与常见坑。

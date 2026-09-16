@@ -209,3 +209,27 @@ def test_download_financial_history(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     calls.clear()
     c.download_financial_history(tmp_path, 20240101, 20241231)
     assert calls == []
+
+
+def test_normalize_financial_name_prefix() -> None:
+    from easy_tdx.client import _normalize_financial_name
+
+    assert _normalize_financial_name("gpcw20260331.zip") == "tdxfin/gpcw20260331.zip"
+    assert _normalize_financial_name("tdxfin/gpcw20260331.zip") == "tdxfin/gpcw20260331.zip"
+
+
+def test_get_financial_file_adds_prefix(monkeypatch) -> None:
+    """裸文件名必须自动补 tdxfin/ 前缀，否则服务器会返回空导致静默失败。"""
+    from easy_tdx import TdxClient
+
+    seen: list[str] = []
+
+    def fake_download(self, host, name):  # noqa: ANN001
+        seen.append(name)
+        return b"PK\x03\x04rest"
+
+    monkeypatch.setattr(TdxClient, "_download_from_host", fake_download)
+    c = TdxClient(host="127.0.0.1")
+    out = c.get_financial_file("gpcw20260331.zip")
+    assert out.startswith(b"PK")
+    assert seen == ["tdxfin/gpcw20260331.zip"]

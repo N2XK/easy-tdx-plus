@@ -211,6 +211,7 @@ def run_mac() -> None:
         check(g, "get_capital_flow", lambda: c.get_capital_flow(1, "600519"))
         check(g, "get_auction", lambda: c.get_auction(1, "600519"))
         check(g, "get_unusual", lambda: c.get_unusual(0, count=20))
+        check(g, "get_goods_list", lambda: c.get_goods_list(31, 0, 3))
         check(g, "get_server_info", lambda: c.get_server_info())
         check(g, "get_kline_offset", lambda: c.get_kline_offset())
 

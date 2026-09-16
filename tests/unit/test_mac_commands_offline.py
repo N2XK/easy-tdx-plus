@@ -128,3 +128,45 @@ def test_report_file_cmd() -> None:
     assert len(req) == 12 + 8 + 100
     assert GetReportFileCmd("x", 0).parse_response(b"\x00\x00\x00\x00abc") == b"abc"
     assert GetReportFileCmd("x", 0).parse_response(b"\x00") == b""
+
+
+def test_mac_get_goods_list_delegates_to_mac_ex(monkeypatch) -> None:
+    """MacClient.get_goods_list 必须走 MAC-EX，而不是 7709 上的 0x2562。"""
+    import pandas as pd
+
+    from easy_tdx.mac import client as mac_client
+    from easy_tdx.mac.client import MacClient
+
+    closed: list[bool] = []
+
+    class _FakeMacEx:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def connect(self) -> None:
+            pass
+
+        def close(self) -> None:
+            closed.append(True)
+
+        def goods_list(self, market, start=0, count=600):
+            self.calls.append((market, start, count))
+            return pd.DataFrame({"market": [market], "code": ["00001"]})
+
+    fake = _FakeMacEx()
+    monkeypatch.setattr(
+        "easy_tdx.ex.mac_client.MacExClient.from_best_host",
+        classmethod(lambda cls, **kw: fake),
+    )
+
+    c = MacClient("127.0.0.1")
+    df = c.get_goods_list(31, 0, 3)
+    assert df.iloc[0]["market"] == 31
+    assert fake.calls == [(31, 0, 3)]
+    # 复用同一连接
+    c.get_goods_list(74, 0, 3)
+    assert fake.calls[-1] == (74, 0, 3)
+    c.close()
+    assert closed == [True]
+    assert c._mac_ex is None
+    assert mac_client  # 模块引用，避免未使用告警

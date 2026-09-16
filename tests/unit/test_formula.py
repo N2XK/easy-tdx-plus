@@ -125,7 +125,7 @@ def test_upnday_downnday() -> None:
 def test_slope_var_math() -> None:
     out = evaluate("S: SLOPE(CLOSE,2); V: VAR(CLOSE,3);", _bars())
     assert out["S"].iloc[-1] == pytest.approx(-1.0)
-    assert out["V"].iloc[-1] == pytest.approx(pd.Series([15.0, 16.0, 15.0]).var(ddof=0))
+    assert out["V"].iloc[-1] == pytest.approx(pd.Series([15.0, 16.0, 15.0]).var(ddof=1))
 
 
 def test_dma_and_const() -> None:
@@ -155,6 +155,7 @@ def test_aliases() -> None:
     out = evaluate("A: IFF(CLOSE>11,1,0); B: AVERAGE(CLOSE,2); S: STDDEV(CLOSE,3);", bars)
     assert out["A"].dtype == float
     pd.testing.assert_series_equal(out["B"], ind_ma(bars["close"], 2), check_names=False)
+    # STDDEV 保留总体标准差（ddof=0）语义
     pd.testing.assert_series_equal(
         out["S"], bars["close"].rolling(3).std(ddof=0), check_names=False
     )
@@ -291,3 +292,14 @@ def test_wma_mtm_roc_dpo() -> None:
     )
     ma = close.rolling(4).mean()
     pd.testing.assert_series_equal(out["D"], close - ma.shift(3), check_names=False)
+
+
+def test_std_var_are_sample_and_stdp_varp_population() -> None:
+    """通达信语义：STD/VAR 为样本(ddof=1)，STDP/VARP 为总体(ddof=0)。"""
+    bars = _bars()
+    close = bars["close"]
+    out = evaluate("A: STD(CLOSE,5); B: STDP(CLOSE,5); C: VAR(CLOSE,5); D: VARP(CLOSE,5);", bars)
+    pd.testing.assert_series_equal(out["A"], close.rolling(5).std(ddof=1), check_names=False)
+    pd.testing.assert_series_equal(out["B"], close.rolling(5).std(ddof=0), check_names=False)
+    pd.testing.assert_series_equal(out["C"], close.rolling(5).var(ddof=1), check_names=False)
+    pd.testing.assert_series_equal(out["D"], close.rolling(5).var(ddof=0), check_names=False)

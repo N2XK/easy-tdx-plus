@@ -4,11 +4,12 @@
 - 语句：`NAME: expr;`（输出）、`NAME:= expr;`（中间量）、裸表达式
 - 变量：OPEN/HIGH/LOW/CLOSE/VOL/AMOUNT（及别名 O/H/L/C/V）、前期赋值变量
 - 运算符：`+ - * /`、比较 `< > <= >= = <>`、逻辑 `AND OR NOT`
-- 函数：REF MA EMA SMA SUM HHV LLV STD COUNT CROSS ABS MAX MIN IF RSI BARSLAST
+- 函数：REF MA EMA SMA SUM HHV LLV STD STDP COUNT CROSS ABS MAX MIN IF RSI BARSLAST
   BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
-  UPNDAY DOWNNDAY SLOPE VAR DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
+  UPNDAY DOWNNDAY SLOPE VAR VARP DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
   BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS TR ATR OBV PDI MDI ADX ADXR SAR
-  WMA MTM ROC DPO（及别名 IFF AVERAGE STDDEV）
+  WMA MTM ROC DPO（及别名 IFF AVERAGE STDDEV；STD/VAR 为估算(样本)口径，
+  STDP/VARP/STDDEV 为总体口径，与通达信一致）
 
 用法::
 
@@ -215,6 +216,12 @@ def _fn_llv(x: Any, n: Any) -> pd.Series:
 
 
 def _fn_std(x: Any, n: Any) -> pd.Series:
+    """N 周期估算标准差（样本，ddof=1；通达信 STD）。"""
+    return _series(x, _INDEX["idx"]).rolling(int(n)).std(ddof=1)
+
+
+def _fn_stdp(x: Any, n: Any) -> pd.Series:
+    """N 周期总体标准差（ddof=0；通达信 STDP）。"""
     return _series(x, _INDEX["idx"]).rolling(int(n)).std(ddof=0)
 
 
@@ -387,7 +394,12 @@ def _fn_slope(x: Any, n: Any) -> pd.Series:
 
 
 def _fn_var(x: Any, n: Any) -> pd.Series:
-    """N 周期总体方差。"""
+    """N 周期估算方差（样本，ddof=1；通达信 VAR）。"""
+    return _series(x, _INDEX["idx"]).rolling(int(n)).var(ddof=1)
+
+
+def _fn_varp(x: Any, n: Any) -> pd.Series:
+    """N 周期总体方差（ddof=0；通达信 VARP）。"""
     return _series(x, _INDEX["idx"]).rolling(int(n)).var(ddof=0)
 
 
@@ -693,6 +705,7 @@ _FUNCS: dict[str, Any] = {
     "HHV": _fn_hhv,
     "LLV": _fn_llv,
     "STD": _fn_std,
+    "STDP": _fn_stdp,
     "COUNT": _fn_count,
     "CROSS": _fn_cross,
     "ABS": _fn_abs,
@@ -713,6 +726,7 @@ _FUNCS: dict[str, Any] = {
     "DOWNNDAY": _fn_downnday,
     "SLOPE": _fn_slope,
     "VAR": _fn_var,
+    "VARP": _fn_varp,
     "DMA": _fn_dma,
     "CONST": _fn_const,
     "SQRT": _fn_sqrt,
@@ -745,7 +759,7 @@ _FUNCS: dict[str, Any] = {
     # 别名
     "IFF": _fn_if,
     "AVERAGE": _fn_ma,
-    "STDDEV": _fn_std,
+    "STDDEV": _fn_stdp,
 }
 
 # 供函数取用当前数据索引（求值期间设置）

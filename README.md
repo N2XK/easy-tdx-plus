@@ -586,7 +586,7 @@ dl.backfill_gaps(stocks, trading_days=cal.as_ints())             # 补拉缺口�
 with ParallelTdx(connections=8, mode="direct") as pool:
     pool.map(lambda c, it: c.get_security_quotes([it]), codes)
 
-# 季度历史财务（gpcw）：批量下载 + point-in-time 面板
+# 季度历史财务（gpcw）：批量下载 + 按报告期面板（回测需自行按公告滞后）
 c.download_financial_history("./gpcw", 20230101, 20241231)
 from easy_tdx.offline import read_financial_history_panel
 panel = read_financial_history_panel("./gpcw", codes=["000001"])

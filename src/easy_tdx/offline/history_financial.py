@@ -54,7 +54,8 @@ def read_history_financial_df(filepath: str | Path) -> pd.DataFrame:
     """从本地 gpcw*.dat / .zip 读取历史财务并转 DataFrame。
 
     列为 ``code / market / report_date`` 加位置字段 ``f0..fN``（字段含义随报告期
-    不同，见对应 gpcw 的字段定义）。``report_date`` 可用于构造 point-in-time 面板。
+    不同，见对应 gpcw 的字段定义）。``report_date`` 为报告期，可据此构造按报告期
+    的面板（回测需自行按公告滞后，避免前视偏差）。
     """
     records = read_history_financial(filepath)
     if not records:
@@ -77,7 +78,11 @@ def read_financial_history_panel(
     source: str | Path | list[str | Path],
     codes: list[str] | None = None,
 ) -> pd.DataFrame:
-    """把多季度 gpcw 文件拼成 point-in-time 财务面板。
+    """把多季度 gpcw 文件拼成**按报告期**的财务面板。
+
+    ``report_date`` 是**报告期**（gpcw 文件即按报告期季度切分），不含公告日期。
+    做回测/选股时请按公告滞后使用（例如只用 ``report_date + 1~3 个月`` 之后才可见的记录），
+    否则会产生前视偏差（look-ahead bias）。
 
     Args:
         source: 目录（会读取其中全部 ``gpcw*.zip`` / ``gpcw*.dat``）或文件路径列表。

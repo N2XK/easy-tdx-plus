@@ -119,3 +119,14 @@ def test_live_trading_status_and_suspended() -> None:
             .eq(TRADING_STATUS_SUSPENDED)
             .all()
         )
+
+
+def test_live_mac_get_goods_list() -> None:
+    """MacClient.get_goods_list 内部走 MAC-EX(7727)，应返回扩展市场商品。"""
+    from easy_tdx import ExMarket
+    from easy_tdx.mac.client import MacClient
+
+    with MacClient.from_best_host(timeout=5.0) as c:
+        df = c.get_goods_list(int(ExMarket.HK_MAIN_BOARD), 0, 3)
+        assert len(df) == 3
+        assert "name" in df.columns

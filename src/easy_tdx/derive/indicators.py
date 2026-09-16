@@ -3,7 +3,7 @@
 - MA / EMA
 - MACD（DIF/DEA/MACD，MACD 柱 = 2×(DIF−DEA)）
 - KDJ（RSV → K/D 用 SMA(x, n, 1) 平滑，J = 3K−2D）
-- BOLL（MA ± k×总体标准差）
+- BOLL（MA ± k×估算标准差/样本，通达信语义）
 - RSI（SMA(涨, n, 1) / SMA(|Δ|, n, 1) × 100）
 - 量比（当日量 / 近 N 日均量）
 
@@ -71,7 +71,7 @@ def kdj(
 def boll(close: pd.Series, n: int = 20, k: float = 2.0) -> pd.DataFrame:
     """布林带。返回列：boll_upper、boll_mid、boll_lower。"""
     mid = close.rolling(n).mean()
-    std = close.rolling(n).std(ddof=0)
+    std = close.rolling(n).std(ddof=1)
     return pd.DataFrame({"boll_upper": mid + k * std, "boll_mid": mid, "boll_lower": mid - k * std})
 
 

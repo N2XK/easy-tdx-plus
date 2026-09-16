@@ -135,3 +135,17 @@ class ExTransactionRecord:
     zengcang: int
     nature: int
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+
+@dataclass
+class ExServerInfo:
+    """扩展市场服务器信息（0x2455）。"""
+
+    delay: int
+    info: str
+    version: str
+    server_sign: str
+    server_sign2: str
+    time_now: str
+    server_name: str
+    _raw: bytes = field(default=b"", repr=False, compare=False)

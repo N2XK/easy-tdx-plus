@@ -347,6 +347,41 @@ def test_get_security_features_all_paginates(monkeypatch: pytest.MonkeyPatch) ->
     assert len(df) == 2001
 
 
+def test_async_api_parity_with_sync() -> None:
+    import inspect
+
+    def pub(cls: type) -> set[str]:
+        return {
+            n
+            for n, m in inspect.getmembers(cls, inspect.isfunction)
+            if n.startswith(("get_", "download_"))
+        }
+
+    assert pub(AsyncTdxClient) >= pub(TdxClient)
+
+
+def test_async_get_formula(monkeypatch: pytest.MonkeyPatch) -> None:
+    bars = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [1.0, 1.0],
+            "high": [2.0, 2.0],
+            "low": [0.5, 0.5],
+            "close": [1.5, 1.6],
+            "vol": [1.0, 1.0],
+            "amount": [1.0, 1.0],
+        }
+    )
+    c = AsyncTdxClient(host="127.0.0.1")
+
+    async def fake(*a: object, **k: object) -> pd.DataFrame:
+        return bars
+
+    monkeypatch.setattr(c, "get_bars_range", fake)
+    out = asyncio.run(c.get_formula(Market.SH, "600519", "MA2: MA(CLOSE,2);", 20240101, 20240201))
+    assert list(out.columns) == ["MA2"]
+
+
 def test_finance_info_cache_and_clear(monkeypatch: pytest.MonkeyPatch) -> None:
     from dataclasses import dataclass
 

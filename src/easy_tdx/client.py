@@ -164,6 +164,51 @@ async def _paginate_async(
     return pd.concat(frames, ignore_index=True)
 
 
+def _assemble_stock_profile(
+    stocks: list[tuple[Market, str]],
+    quotes: pd.DataFrame,
+    stat: pd.DataFrame,
+    fins: list[pd.DataFrame],
+) -> pd.DataFrame:
+    """把行情/统计/财务（对齐 stocks）组装为股票信息汇总表（同步/异步共用）。"""
+    stat_map = (
+        stat.set_index("code")[["pe_ttm", "pe_static", "div_yield"]] if not stat.empty else None
+    )
+    rows: list[dict[str, Any]] = []
+    for (mkt, code), (_, q), fin in zip(stocks, quotes.iterrows(), fins):
+        float_shares = float(fin.iloc[0].get("liutong_guben", 0.0)) if not fin.empty else 0.0
+        total_shares = float(fin.iloc[0].get("zong_guben", 0.0)) if not fin.empty else 0.0
+        price = float(q["price"])
+        vol = float(q["vol"])  # 标准行情 vol 单位为手
+        vol_shares = vol * 100
+        rec: dict[str, Any] = {
+            "market": int(mkt),
+            "code": code,
+            "price": price,
+            "pre_close": float(q["pre_close"]),
+            "change_pct": round((price / float(q["pre_close"]) - 1) * 100, 2)
+            if q["pre_close"]
+            else None,
+            "open": float(q["open"]),
+            "high": float(q["high"]),
+            "low": float(q["low"]),
+            "vol": vol,
+            "amount": float(q["amount"]),
+            "float_shares": float_shares,
+            "total_shares": total_shares,
+            "turnover_pct": round(vol_shares / float_shares * 100, 4) if float_shares else None,
+            "float_mv": round(price * float_shares, 2) if float_shares else None,
+            "total_mv": round(price * total_shares, 2) if total_shares else None,
+        }
+        if stat_map is not None and code in stat_map.index:
+            s = stat_map.loc[code]
+            rec["pe_ttm"] = float(s["pe_ttm"])
+            rec["pe_static"] = float(s["pe_static"])
+            rec["div_yield"] = float(s["div_yield"])
+        rows.append(rec)
+    return pd.DataFrame(rows)
+
+
 def _looks_like_index(market: Market, code: str) -> bool:
     """按市场与代码前缀判断是否为指数（用于 K 线自动路由）。"""
     if market == Market.SH:
@@ -1383,43 +1428,8 @@ class TdxClient:
         if quotes.empty:
             return quotes
         stat = self.get_tdx_stat()
-        stat_map = (
-            stat.set_index("code")[["pe_ttm", "pe_static", "div_yield"]] if not stat.empty else None
-        )
-        rows: list[dict[str, Any]] = []
-        for (mkt, code), (_, q) in zip(stocks, quotes.iterrows()):
-            fin = self.get_finance_info(mkt, code)
-            float_shares = float(fin.iloc[0].get("liutong_guben", 0.0)) if not fin.empty else 0.0
-            total_shares = float(fin.iloc[0].get("zong_guben", 0.0)) if not fin.empty else 0.0
-            price = float(q["price"])
-            vol = float(q["vol"])  # 标准行情 vol 单位为手
-            vol_shares = vol * 100
-            rec: dict[str, Any] = {
-                "market": int(mkt),
-                "code": code,
-                "price": price,
-                "pre_close": float(q["pre_close"]),
-                "change_pct": round((price / float(q["pre_close"]) - 1) * 100, 2)
-                if q["pre_close"]
-                else None,
-                "open": float(q["open"]),
-                "high": float(q["high"]),
-                "low": float(q["low"]),
-                "vol": vol,
-                "amount": float(q["amount"]),
-                "float_shares": float_shares,
-                "total_shares": total_shares,
-                "turnover_pct": round(vol_shares / float_shares * 100, 4) if float_shares else None,
-                "float_mv": round(price * float_shares, 2) if float_shares else None,
-                "total_mv": round(price * total_shares, 2) if total_shares else None,
-            }
-            if stat_map is not None and code in stat_map.index:
-                s = stat_map.loc[code]
-                rec["pe_ttm"] = float(s["pe_ttm"])
-                rec["pe_static"] = float(s["pe_static"])
-                rec["div_yield"] = float(s["div_yield"])
-            rows.append(rec)
-        return pd.DataFrame(rows)
+        fins = [self.get_finance_info(mkt, code) for mkt, code in stocks]
+        return _assemble_stock_profile(stocks, quotes, stat, fins)
 
     @staticmethod
     def _download_from_host(
@@ -2129,6 +2139,154 @@ class AsyncTdxClient:
     ) -> pd.DataFrame:
         """便捷获取某代码日期区间内的 K 线（自动推断市场，默认日线）。"""
         return await self.get_bars_range(_infer_market(code), code, start_date, end_date, category)
+
+    async def get_fund_list(self, market: Market, pages: int | str = "all") -> pd.DataFrame:
+        """获取基金列表（ETF/LOF/REITs/分级/债券基金，按代码前缀识别）。"""
+        count = await self.get_security_count(market)
+        limit = count if pages == "all" else min(count, int(pages) * 1000)
+        funds: list[SecurityInfo] = []
+        for start in range(0, limit, 1000):
+            try:
+                stocks = await self._execute(GetSecurityListCmd(market, start))
+            except Exception:
+                continue
+            funds.extend(s for s in stocks if is_fund(s.code))
+        return _to_df(funds)
+
+    async def _daily_bars_with_xdxr(
+        self, market: Market, code: str, start_date: int, end_date: int
+    ) -> tuple[pd.DataFrame, list[Any]]:
+        bars = await self.get_bars_range(market, code, start_date, end_date, KlineCategory.DAY)
+        events = await self._execute(GetXdxrInfoCmd(market, code))
+        return bars, events
+
+    async def get_adjust_factors(
+        self, market: Market, code: str, start_date: int = 19900101, end_date: int | None = None
+    ) -> pd.DataFrame:
+        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件）。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        return compute_adjust_factors(bars, events)
+
+    async def get_fq_bars(
+        self,
+        market: Market,
+        code: str,
+        mode: str = "qfq",
+        start_date: int = 19900101,
+        end_date: int | None = None,
+    ) -> pd.DataFrame:
+        """获取前复权（qfq）/ 后复权（hfq）日线（本地按 gbbq 计算）。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        return adjust_bars(bars, events, mode=mode)
+
+    async def get_basic_daily(
+        self,
+        market: Market,
+        code: str,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        float_shares: float | None = None,
+        total_shares: float | None = None,
+    ) -> pd.DataFrame:
+        """每日基础指标：前收盘 / 涨跌幅 / 振幅 / 换手率 / 市值。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
+        if float_shares is None or total_shares is None:
+            fin = await self.get_finance_info(market, code)
+            if not fin.empty:
+                if float_shares is None:
+                    float_shares = float(fin.iloc[0].get("liutong_guben", 0.0) or 0.0)
+                if total_shares is None:
+                    total_shares = float(fin.iloc[0].get("zong_guben", 0.0) or 0.0)
+        return compute_basic_daily(
+            bars,
+            events,
+            float_shares=float_shares or 0.0,
+            total_shares=total_shares or 0.0,
+        )
+
+    async def get_formula(
+        self,
+        market: Market,
+        code: str,
+        formula: str,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        category: KlineCategory = KlineCategory.DAY,
+    ) -> pd.DataFrame:
+        """在个股 K 线上计算通达信公式（指标/选股）。"""
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        bars = await self.get_bars_range(market, code, start_date, end_date, category)
+        return evaluate(formula, bars)
+
+    async def get_stock_profile(self, stocks: list[tuple[Market, str]]) -> pd.DataFrame:
+        """股票信息汇总：行情 + 股本 + 市值 + 换手率 + 估值（PE/股息率）。"""
+        quotes = await self.get_security_quotes(stocks)
+        if quotes.empty:
+            return quotes
+        stat = await self.get_tdx_stat()
+        fins = [await self.get_finance_info(mkt, code) for mkt, code in stocks]
+        return _assemble_stock_profile(stocks, quotes, stat, fins)
+
+    async def download_financial_history(
+        self,
+        data_dir: str | Path,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        overwrite: bool = False,
+        host: str | None = None,
+    ) -> list[Path]:
+        """批量下载季度历史财务（gpcw*.zip）到本地，支持断点续传。"""
+        import re
+
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        out_dir = Path(data_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        listing = await self.get_financial_file_list(host)
+        if listing.empty:
+            return []
+        entries: list[tuple[int, str]] = []
+        for filename in listing["filename"]:
+            m = re.search(r"(\d{8})", str(filename))
+            if m and start_date <= int(m.group(1)) <= end_date:
+                entries.append((int(m.group(1)), str(filename)))
+        entries.sort()
+
+        written: list[Path] = []
+        for _date, filename in entries:
+            target = out_dir / Path(filename).name
+            if target.is_file() and target.stat().st_size > 0 and not overwrite:
+                written.append(target)
+                continue
+            fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
+            data = await self.get_financial_file(fetch_name, host)
+            if not data or not data.startswith(b"PK"):
+                continue
+            tmp = target.with_suffix(target.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(target)
+            written.append(target)
+        return written
+
+    @staticmethod
+    def probe_capabilities(
+        host: str, port: int | None = None, timeout: float | None = None, *, refresh: bool = False
+    ) -> dict[str, bool]:
+        """探测指定服务器的分项能力 ``{feature: bool}``（同同步版）。"""
+        return probe_capabilities(
+            host,
+            port if port is not None else get_port(),
+            timeout if timeout is not None else get_timeout(),
+            refresh=refresh,
+        )
 
     async def get_trading_calendar(
         self,

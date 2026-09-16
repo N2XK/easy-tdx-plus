@@ -124,6 +124,15 @@ def _flatten_multi_tick_chart(chart: MacMultiTickChart) -> list[dict[str, Any]]:
 # ============================================================
 
 
+def _add_code_columns(df: pd.DataFrame) -> None:
+    """为 0x124A 返回表补充 is_instrument / is_connect 便利列。"""
+    if df.empty or "flags" not in df.columns:
+        return
+    flags = df["flags"].astype("int64")
+    df["is_instrument"] = (flags & 0x10000) != 0
+    df["is_connect"] = (flags & 0x1000000) != 0
+
+
 class MacClient:
     """同步 MAC 协议客户端，支持 IP 优选与断线自动重连。
 
@@ -660,7 +669,8 @@ class MacClient:
     ) -> pd.DataFrame:
         """获取分类代码表 / K 线偏移表（0x124A）。
 
-        返回列：``flag/code/name/abbr/mark/flags``（如 ``000001 平安银行 PAYH``）；
+        返回列：``flag/code/name/abbr/mark/flags/is_instrument/is_connect``
+        （如 ``000001 平安银行 PAYH``；``is_connect`` = 互联互通/深股通标的）；
         协议头部 ``Total``（大端）/``Returned``（小端）见 ``df.attrs``。
         小 ``count``（5/100）时服务端只回头部、无记录；``count`` 足够大
         （默认 128000）时返回整表。
@@ -676,6 +686,7 @@ class MacClient:
             if items
             else pd.DataFrame(columns=["flag", "code", "name", "abbr", "mark", "flags"])
         )
+        _add_code_columns(df)
         df.attrs["total"] = cmd.total
         df.attrs["returned"] = cmd.returned
         return df
@@ -1245,12 +1256,17 @@ class AsyncMacClient:
         offset: int = 0,
         count: int = 128000,
     ) -> pd.DataFrame:
-        items = await self._execute(KlineOffsetCmd(offset, count))
-        return (
+        cmd = KlineOffsetCmd(offset, count)
+        items = await self._execute(cmd)
+        df = (
             _to_df(items)
             if items
             else pd.DataFrame(columns=["flag", "code", "name", "abbr", "mark", "flags"])
         )
+        _add_code_columns(df)
+        df.attrs["total"] = cmd.total
+        df.attrs["returned"] = cmd.returned
+        return df
 
     # ------------------------------------------------------------------ #
     # 文件操作

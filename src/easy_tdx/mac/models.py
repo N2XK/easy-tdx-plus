@@ -230,8 +230,10 @@ class CategoryCodeItem:
 
     - ``abbr`` 为**拼音缩写**（如 000001 平安银行 → ``PAYH``），可用于拼音检索；
     - ``mark`` 通常为 0，仅 1 条特殊记录（399354 分析师指）为 ``0xFDCA``；
-    - ``flags`` 为分类位掩码：bit9(0x200) 恒置位，其余位与代码段相关
-      （395xxx→0x200、399xxx→0x10200、深市股票→0x1010200/0x10200），确切语义未确证；
+    - ``flags`` 为分类位掩码（已用实盘名单验证）：
+      **bit9(0x200) 恒置位**；**bit16 == 具体证券/指数**（399xxx 指数、000xxx 个股为 1；
+      395xxx 统计/汇总类为 0）；**bit24 == 互联互通标的**（深股通，131/131 与 MAC
+      ``FilterType.HK_CONNECT`` 名单一致）。
     - ``_raw`` 保留原始 35 字节。
     """
 
@@ -242,6 +244,16 @@ class CategoryCodeItem:
     mark: int = 0
     flags: int = 0
     _raw: bytes = field(default=b"", repr=False, compare=False)
+
+    @property
+    def is_instrument(self) -> bool:
+        """是否具体证券/指数（flags bit16）；False 表示统计/汇总类（如主板Ａ股）。"""
+        return bool(self.flags & 0x10000)
+
+    @property
+    def is_connect(self) -> bool:
+        """是否为互联互通标的（flags bit24，深股通）。"""
+        return bool(self.flags & 0x1000000)
 
 
 class KlineOffsetInfo:

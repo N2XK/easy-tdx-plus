@@ -1031,14 +1031,21 @@ class TdxClient:
     # ------------------------------------------------------------------ #
 
     def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
-        """获取今日分时数据（240条，走历史分时接口）。"""
+        """获取今日分时数据（240条，走历史分时接口 0x0fb4）。
+
+        说明：盘前/非交易日服务端本日无数据时返回空（属正常，例如服务端
+        ``last_trading_day`` 仍未推进到本日）；解码失败会自动回退全功能主机。
+        """
         today = _today_in_shanghai()
-        bars = self._execute(GetHistoryMinuteTimeDataCmd(market, code, today))
+        bars = self._execute_std(GetHistoryMinuteTimeDataCmd(market, code, today))
         return _add_minute_datetime(_to_df(bars), today)
 
     def get_history_minute_time_data(self, market: Market, code: str, date: int) -> pd.DataFrame:
-        """获取历史某日分时数据（date: YYYYMMDD）。"""
-        bars = self._execute(GetHistoryMinuteTimeDataCmd(market, code, date))
+        """获取历史某日分时数据（date: YYYYMMDD）。
+
+        该日未交易时结果本就可能为空，故不强制非空，仅在解码失败时回退主机。
+        """
+        bars = self._execute_std(GetHistoryMinuteTimeDataCmd(market, code, date))
         return _add_minute_datetime(_to_df(bars), date)
 
     def get_recent_minute_time_data(self, market: Market, code: str, days: int = 5) -> pd.DataFrame:
@@ -2416,13 +2423,13 @@ class AsyncTdxClient:
 
     async def get_minute_time_data(self, market: Market, code: str) -> pd.DataFrame:
         today = _today_in_shanghai()
-        bars = await self._execute(GetHistoryMinuteTimeDataCmd(market, code, today))
+        bars = await self._execute_std(GetHistoryMinuteTimeDataCmd(market, code, today))
         return _add_minute_datetime(_to_df(bars), today)
 
     async def get_history_minute_time_data(
         self, market: Market, code: str, date: int
     ) -> pd.DataFrame:
-        bars = await self._execute(GetHistoryMinuteTimeDataCmd(market, code, date))
+        bars = await self._execute_std(GetHistoryMinuteTimeDataCmd(market, code, date))
         return _add_minute_datetime(_to_df(bars), date)
 
     async def get_recent_minute_time_data(

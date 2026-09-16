@@ -100,7 +100,11 @@ def run_standard() -> None:
             g, "get_bars_range", lambda: c.get_bars_range(Market.SH, "600519", 20240101, 20240201)
         )
         check(g, "get_k_data", lambda: c.get_k_data("600519", 20240101, 20240201))
-        check(g, "get_minute_time_data", lambda: c.get_minute_time_data(Market.SH, "600519"))
+        check(
+            g,
+            "get_recent_minute_time_data",
+            lambda: c.get_recent_minute_time_data(Market.SH, "600519", days=2),
+        )
         check(
             g,
             "get_history_minute_time_data",
@@ -266,7 +270,12 @@ def run_ex() -> None:
             check(g, "mac goods_quotes_list", lambda: mac.goods_quotes_list(mkt, count=5))
             check(g, "mac goods_kline", lambda: mac.goods_kline(mkt, "00700", count=5))
             check(g, "mac goods_tick_chart", lambda: mac.goods_tick_chart(mkt, "00700"))
-            check(g, "mac goods_transaction", lambda: mac.goods_transaction(mkt, "00700"))
+            # 港股该命令返回空（不支持），改用期货市场验证
+            check(
+                g,
+                "mac goods_transaction",
+                lambda: mac.goods_transaction(int(ExMarket.ZZ_FUTURES), "AP2610", count=5),
+            )
             check(g, "mac goods_chart_sampling", lambda: mac.goods_chart_sampling(mkt, "00700"))
 
 

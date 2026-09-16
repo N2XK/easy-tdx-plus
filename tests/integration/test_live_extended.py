@@ -130,3 +130,21 @@ def test_live_mac_get_goods_list() -> None:
         df = c.get_goods_list(int(ExMarket.HK_MAIN_BOARD), 0, 3)
         assert len(df) == 3
         assert "name" in df.columns
+
+
+def test_live_category_code_flags_match_connect_list() -> None:
+    """0x124A flags bit24（互联互通）应与 MAC HK_CONNECT 名单一致。"""
+    from easy_tdx.mac.client import MacClient
+    from easy_tdx.mac.enums import Category, FilterType
+
+    with MacClient.from_best_host(timeout=10) as c:
+        connect = set(
+            c.get_stock_quotes_list(Category.SZ, 0, 5000, exclude_flags=[FilterType.HK_CONNECT])[
+                "code"
+            ]
+        )
+        df = c.get_kline_offset()
+    stocks = df[df["code"].str.startswith("000")]
+    assert len(stocks) > 50
+    match = (stocks["code"].isin(connect) == stocks["is_connect"]).all()
+    assert match, "flags bit24 与互联互通名单不一致"

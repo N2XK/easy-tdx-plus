@@ -64,6 +64,13 @@
 
 ### Fixed
 
+- **分时接口改为 `_execute_std`**：`get_minute_time_data`/`get_history_minute_time_data`
+  原先用 `_execute`，主机不响应 0x0fb4（解码失败）时不会自动回退全功能主机；现统一兜底。
+- **`verify_all` 稳定性**：分钟线检查改用 `get_recent_minute_time_data`（不受盘前/非交易日影响），
+  MAC-EX 逐笔改用期货市场（港股该命令本就不支持）；现 **183/183 全 OK（0 EMPTY）**。
+- **`get_kline_offset`(0x124A) `flags` 位语义确证**：用 MAC `FilterType.HK_CONNECT` 名单交叉验证，
+  **bit24 = 互联互通（深股通）标的**（深市个股 131/131 完全一致）、**bit16 = 具体证券/指数**
+  （399xxx/000xxx=1，395xxx 统计类=0）。返回表新增 `is_instrument`/`is_connect` 列。
 - **`get_kline_offset`(0x124A) 记录布局修正**：此前把 35 字节记录切成 `tag(4)+tail(8)`，实为
   `flag(1)+code(6)+name(8)+mark(8)+abbr(8,ASCII)+flags(u32)`；其中 **abbr 是拼音缩写**
   （000001 平安银行→PAYH）。现模型/返回列改为 `flag/code/name/abbr/mark/flags`（`mark` 仅

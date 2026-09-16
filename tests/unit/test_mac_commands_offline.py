@@ -310,3 +310,30 @@ def test_kline_offset_headers_and_records() -> None:
     cmd2 = KlineOffsetCmd(0, 5)
     assert cmd2.parse_response(struct.pack(">I", 5) + struct.pack("<I", 0)) == []
     assert cmd2.total == 5 and cmd2.returned == 0
+
+
+def test_category_code_flags_semantics() -> None:
+    """0x124A flags 位语义：bit16=具体证券/指数，bit24=互联互通。"""
+    import struct
+
+    from easy_tdx.mac.commands.kline_offset import KlineOffsetCmd
+
+    def rec(code, name, abbr, flags):
+        b = b"\x00" + code.encode("ascii") + name.encode("gbk").ljust(8, b"\x00")
+        b += b"\x00" * 8 + abbr.encode("ascii").ljust(8, b"\x00") + struct.pack("<I", flags)
+        return b.ljust(35, b"\x00")[:35]
+
+    body = (
+        struct.pack(">I", 0)
+        + struct.pack("<I", 3)
+        + b"".join(
+            [
+                rec("395001", "主板Ａ股", "ZBAG", 0x200),  # 统计类
+                rec("399001", "深证成指", "SZCZ", 0x10200),  # 指数（非互联互通）
+                rec("000001", "平安银行", "PAYH", 0x1010200),  # 个股 + 互联互通
+            ]
+        )
+    )
+    items = KlineOffsetCmd(0, 128000).parse_response(body)
+    assert [i.is_instrument for i in items] == [False, True, True]
+    assert [i.is_connect for i in items] == [False, False, True]

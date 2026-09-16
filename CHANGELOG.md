@@ -19,6 +19,9 @@
 - **扩展命令**：`0x0452`(特殊涨跌停表)、`0x051a`(成交分布)、`0x051b`(分时副图)、`0x051c`(指数动量)、
   `0x051d`(指数概况)、`0x053f`(排行榜)、`0x0547`(加密行情)、`0x0fd1`(小走势图)。
 - **离线**：`official` 官方历史数据下载（清单解析 + 断点续传 + 原子写）；`htc` 分笔容器读取（.htc 容器/标的帧 + zlib 块）。
+- **通达信 zhb 配置扩展**：`get_ah_rates`（A/H 对照）、`get_adr_list`（ADR 对照）、`get_industry_chain`（产业链）、
+  `get_named_blocks`（基金/美股/港股/中证板块成分）、`get_tdx_holidays`（内嵌节假日表 1991 至今）。
+- **历史财务**：`read_history_financial_df` 快路径；point-in-time 面板（`report_date`）。
 - **派生计算**：仿射复权因子与前后复权日线；基础日线（换手/市值等）；技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比）。
 - **公式解释器**（`easy_tdx.derive.formula`）：50+ 内置函数（REF/MA/EMA/SMA/SUM/HHV/LLV/STD/COUNT/CROSS/RSI/BARSLAST/
   BACKSET/SUMBARS/FILTER/HHVBARS/SLOPE/VAR/DMA/ZIG/PEAK/TROUGH/TR/ATR/OBV/PDI/MDI/ADX/ADXR/SAR 等）、

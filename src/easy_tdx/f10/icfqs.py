@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..exceptions import TdxCommandError
 from .models import F10Response
 from .parse import parse_tqlex_response
 from .transport import TqlexTransport
@@ -129,9 +130,13 @@ class IcfqsClient:
     # 题材 / 主题
     # ------------------------------------------------------------------ #
 
-    def topic_list(self, category: str, setcode: str, page: int = 1) -> F10Response:
-        """题材列表（分页）。"""
-        return self.tql(ENTRY_TOPIC, "00601", f"{category}|{setcode}", max(1, page))
+    def topic_list(self, category: str = "0", page: int = 1) -> F10Response:
+        """题材列表（分页）。
+
+        ``category`` 为服务端选择器（实测 0-9 返回相同集合，疑似忽略）；``page`` 控制翻页。
+        此前误将 ``category|setcode`` 拼成一个参数，导致始终返回空。
+        """
+        return self.tql(ENTRY_TOPIC, "00601", str(category or "0"), max(1, page))
 
     def topic_search(self, keyword: str) -> F10Response:
         """题材搜索。"""
@@ -206,11 +211,13 @@ class IcfqsClient:
     def quotes_batch(
         self, codes: list[tuple[str, str]], want_columns: list[str] | None = None
     ) -> F10Response:
-        """批量行情快照（codes 为 (setcode, code) 列表）。"""
-        body = {
-            "Setcode": [c[0] for c in codes],
-            "Head": {"Target": 0},
-            "WantCol": want_columns or ["CLOSE", "NOW"],
-            "Code": [c[1] for c in codes],
-        }
-        return self.post_json(ENTRY_QUOTES_BATCH, body)
+        """批量行情快照（codes 为 (setcode, code) 列表）。
+
+        **当前不可用**：入口 ``HQServ.PBCombHQ`` 在默认网关与 hot 网关均返回 HTTP 503
+        （未注册）。批量/实时行情请改用 MAC / MAC-EX 或标准协议接口；题材行情可用
+        :meth:`topic_quotes`。
+        """
+        raise TdxCommandError(
+            "ICFQS 批量行情入口 HQServ.PBCombHQ 未注册（503）；"
+            "请改用 MAC/MAC-EX 行情或 topic_quotes"
+        )

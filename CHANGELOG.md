@@ -64,6 +64,11 @@
 
 ### Fixed
 
+- **`AltF10Client` 继承的主网关入口全部 503**：`CWServ.*/CWSearch.*/HQServ.*` 在 tdxhub 未注册；
+  现前置拦截并抛 `TdxCommandError`（提示改用 `F10Client`），不再返回晦涩的 503。
+- **`IcfqsClient.topic_list` 恒返回空**：此前把 `category|setcode` 拼成单个参数；现按单分类选择器调用，
+  分页恢复（实测 20 条/页）。
+- **`IcfqsClient.quotes_batch` 入口未注册**（`HQServ.PBCombHQ` 默认/hot 网关均 503）：改为快速失败 + 指引。
 - **扩展逐笔价格未缩放**（`ex/get_transaction.py`）：0x 逐笔的整数价格需 /1000（实测港股/美股/期货一致），
   此前返回 433400 而非 433.4，与同市场 quote/minute/bars 口径不一致；现换算为真实价格。
 - **扩展K线 `amount` 读错字段**（`ex/get_instrument_bars.py`）：此前取的是 `position` 的浮点重解释（如 5e-42），

@@ -96,11 +96,14 @@ def test_topic_rotation_body() -> None:
 
 
 def test_quotes_batch_body() -> None:
+    # HQServ.PBCombHQ 入口未注册（503），方法改为快速失败并给指引
+    import pytest
+
+    from easy_tdx.exceptions import TdxCommandError
+
     fake = _FakeTransport()
-    IcfqsClient(transport=fake).quotes_batch([("1", "600519")], want_columns=["NOW"])
-    entry, body = fake.calls[0]
-    assert entry == "HQServ.PBCombHQ"
-    assert body == {"Setcode": ["1"], "Head": {"Target": 0}, "WantCol": ["NOW"], "Code": ["600519"]}
+    with pytest.raises(TdxCommandError):
+        IcfqsClient(transport=fake).quotes_batch([("1", "600519")], want_columns=["NOW"])
 
 
 def test_response_parsed() -> None:
@@ -138,3 +141,14 @@ def test_icfqs_routes_hot_entries(monkeypatch: Any) -> None:
     hot = next(t for t in created if "hot.icfqs.com" in t.base_url)
     assert hot.calls == ["CWServ.cfg_tk_mrfp", "CWServ.cfg_fx_yzlhb"]
     assert default.calls == ["CWServ.ph_tdxdatacenter_zttz_zy"]
+
+
+def test_quotes_batch_reports_dead_endpoint() -> None:
+    """HQServ.PBCombHQ 未注册（503），应快速给出清晰错误而不是慢重试。"""
+    import pytest
+
+    from easy_tdx.exceptions import TdxCommandError
+    from easy_tdx.f10 import IcfqsClient
+
+    with pytest.raises(TdxCommandError):
+        IcfqsClient().quotes_batch([("sh", "600519")])

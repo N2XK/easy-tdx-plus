@@ -50,8 +50,8 @@ class AsyncIcfqsClient:
     async def daily_review_latest_date(self) -> F10Response:
         return await asyncio.to_thread(self._sync.daily_review_latest_date)
 
-    async def topic_list(self, category: str, setcode: str, page: int = 1) -> F10Response:
-        return await asyncio.to_thread(self._sync.topic_list, category, setcode, page)
+    async def topic_list(self, category: str = "0", page: int = 1) -> F10Response:
+        return await asyncio.to_thread(self._sync.topic_list, category, page)
 
     async def topic_search(self, keyword: str) -> F10Response:
         return await asyncio.to_thread(self._sync.topic_search, keyword)

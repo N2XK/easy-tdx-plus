@@ -13,6 +13,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from ..exceptions import TdxCommandError
 from .client import F10Client, _code6
 from .entries import (
     ALT_TQLEX_BASE_URL,
@@ -45,9 +48,18 @@ from .transport import TqlexTransport
 
 __all__ = ["AltF10Client"]
 
+# tdxhub 网关只注册 TdxShare* 命名空间；继承自 F10Client 的 CWServ/CWSearch/HQServ
+# 入口在此网关不可用（实测 HTTP 503），需前置拦截并给出清晰提示。
+_ALT_UNSUPPORTED_PREFIXES = ("CWServ.", "CWSearch.", "HQServ.")
+
 
 class AltF10Client(F10Client):
-    """指向 tdxhub 网关的 F10 客户端。"""
+    """指向 tdxhub 网关的 F10 客户端（只支持 ``TdxShare*`` 入口）。
+
+    注意：本类继承自 :class:`F10Client`，但主网关的 ``CWServ.* / CWSearch.* /
+    HQServ.*`` 入口在 tdxhub 未注册（实测 503）。调用这些继承方法会抛出
+    :class:`~easy_tdx.exceptions.TdxCommandError`；请改用 ``F10Client``。
+    """
 
     def __init__(
         self,
@@ -70,6 +82,16 @@ class AltF10Client(F10Client):
             empty_retries=empty_retries,
             empty_retry_delay=empty_retry_delay,
         )
+
+    def call(
+        self, entry: str, body: Any | None = None, *, params: list[Any] | None = None
+    ) -> F10Response:
+        """拦截 tdxhub 不支持的入口，避免返回 503 式的晦涩错误。"""
+        if entry.startswith(_ALT_UNSUPPORTED_PREFIXES):
+            raise TdxCommandError(
+                f"AltF10(tdxhub) 不支持入口 {entry!r}（该入口属主网关）；请改用 F10Client"
+            )
+        return super().call(entry, body, params=params)
 
     def share_capital_structure(self, code: str) -> F10Response:
         """股本结构变动历史（``gbjg``）。"""

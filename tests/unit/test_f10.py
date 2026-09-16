@@ -346,3 +346,24 @@ def test_async_f10_client() -> None:
     row = asyncio.run(main())
     assert fake.calls == [("CWServ.tdxf10_gg_gsgk", {"Params": ["8", "600519", ""]})]
     assert row["T035"] == "A股"
+
+
+def test_altf10_rejects_main_gateway_entries() -> None:
+    """AltF10(tdxhub) 不支持 CWServ/CWSearch/HQServ 入口，应给出清晰错误而非 503。"""
+    import pytest
+
+    from easy_tdx.exceptions import TdxCommandError
+    from easy_tdx.f10 import AltF10Client
+
+    a = AltF10Client()
+    for entry in ("CWServ.tdxf10_gg_comreq", "CWSearch.tzx_rcache", "HQServ.hq_nlp_gpsj"):
+        with pytest.raises(TdxCommandError):
+            a.call(entry, params=["1"])
+    # TdxShare* 入口不被拦截（此处注入假传输，避免联网）
+    from easy_tdx.f10.models import F10Response
+
+    a._transport_for = lambda base: type(  # type: ignore[method-assign]
+        "T", (), {"post": lambda self, entry, body: {"ErrorCode": 0, "ResultSets": []}}
+    )()
+    resp = a.call("TdxSharePCCW.tdxf10_gg_gbjg", params=["600519", 0])
+    assert isinstance(resp, F10Response)

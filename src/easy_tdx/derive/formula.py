@@ -7,7 +7,8 @@
 - 函数：REF MA EMA SMA SUM HHV LLV STD COUNT CROSS ABS MAX MIN IF RSI BARSLAST
   BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
   UPNDAY DOWNNDAY SLOPE VAR DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
-  BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS（及别名 IFF AVERAGE STDDEV）
+  BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS TR ATR OBV PDI MDI ADX ADXR SAR
+  （及别名 IFF AVERAGE STDDEV）
 
 用法::
 
@@ -552,6 +553,105 @@ def _fn_troughbars(x: Any, n: Any, m: Any = 1) -> pd.Series:
     return _swing_series(x, n, m, "L", bars=True)
 
 
+def _need(name: str) -> pd.Series:
+    """取当前求值环境的行情列（供无参指标函数使用）。"""
+    if name in _ENV:
+        return _ENV[name]
+    raise FormulaError(f"缺少行情列: {name}")
+
+
+def _tr() -> pd.Series:
+    high = _need("HIGH")
+    low = _need("LOW")
+    close = _need("CLOSE")
+    prev = close.shift(1)
+    return pd.concat([high - low, (high - prev).abs(), (low - prev).abs()], axis=1).max(axis=1)
+
+
+def _fn_tr() -> pd.Series:
+    """真实波幅 TR = max(H-L, |H-昨收|, |L-昨收|)。"""
+    return _tr()
+
+
+def _fn_atr(n: Any) -> pd.Series:
+    """平均真实波幅 ATR = TR 的 N 周期简单均值。"""
+    return _tr().rolling(int(n)).mean()
+
+
+def _fn_obv() -> pd.Series:
+    """能量潮 OBV：收涨累加成交量，收跌累减，平盘不变。"""
+    close = _need("CLOSE")
+    vol = _need("VOL")
+    direction = np.sign(close.diff()).fillna(0.0)
+    return (direction * vol).cumsum()
+
+
+def _directional(n: int) -> tuple[pd.Series, pd.Series, pd.Series]:
+    high, low = _need("HIGH"), _need("LOW")
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+    atr = _sma_cn(_tr(), n)
+    pdi = 100 * _sma_cn(plus_dm, n) / atr.replace(0, pd.NA)
+    mdi = 100 * _sma_cn(minus_dm, n) / atr.replace(0, pd.NA)
+    dx = 100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, pd.NA)
+    return pdi.fillna(0.0), mdi.fillna(0.0), dx.fillna(0.0)
+
+
+def _fn_pdi(n: Any) -> pd.Series:
+    """正向动向指标 PDI(N)。"""
+    return _directional(int(n))[0]
+
+
+def _fn_mdi(n: Any) -> pd.Series:
+    """负向动向指标 MDI(N)。"""
+    return _directional(int(n))[1]
+
+
+def _fn_adx(n: Any) -> pd.Series:
+    """平均动向指标 ADX(N) = DX 的 N 周期 Wilder 平滑。"""
+    return _sma_cn(_directional(int(n))[2], int(n))
+
+
+def _fn_adxr(n: Any) -> pd.Series:
+    """ADX 的均值 ADXR(N) = (ADX + ADX[N]) / 2。"""
+    adx = _fn_adx(n)
+    return (adx + adx.shift(int(n))) / 2
+
+
+def _fn_sar(n: Any, s: Any, m: Any) -> pd.Series:
+    """抛物线转向 SAR(N, S, M)（近似实现；S、M 为百分比，如 SAR(4,2,20)）。"""
+    high = _need("HIGH").to_numpy(dtype="float64")
+    low = _need("LOW").to_numpy(dtype="float64")
+    length = len(high)
+    out = np.full(length, np.nan)
+    if length < 2:
+        return pd.Series(out, index=_INDEX["idx"])
+    step = float(s) / 100.0
+    max_af = float(m) / 100.0
+    trend = 1
+    af = step
+    extreme = high[0]
+    out[0] = low[0]
+    for i in range(1, length):
+        cur = out[i - 1] + af * (extreme - out[i - 1])
+        if trend == 1:
+            if low[i] < cur:
+                trend, cur, extreme, af = -1, extreme, low[i], step
+            elif high[i] > extreme:
+                extreme, af = high[i], min(af + step, max_af)
+            cur = min(cur, low[i - 1], low[i])
+        else:
+            if high[i] > cur:
+                trend, cur, extreme, af = 1, extreme, high[i], step
+            elif low[i] < extreme:
+                extreme, af = low[i], min(af + step, max_af)
+            cur = max(cur, high[i - 1], high[i])
+        out[i] = cur
+    return pd.Series(out, index=_INDEX["idx"])
+
+
 _FUNCS: dict[str, Any] = {
     "REF": _fn_ref,
     "MA": _fn_ma,
@@ -598,6 +698,14 @@ _FUNCS: dict[str, Any] = {
     "TROUGH": _fn_trough,
     "PEAKBARS": _fn_peakbars,
     "TROUGHBARS": _fn_troughbars,
+    "TR": _fn_tr,
+    "ATR": _fn_atr,
+    "OBV": _fn_obv,
+    "PDI": _fn_pdi,
+    "MDI": _fn_mdi,
+    "ADX": _fn_adx,
+    "ADXR": _fn_adxr,
+    "SAR": _fn_sar,
     # 别名
     "IFF": _fn_if,
     "AVERAGE": _fn_ma,
@@ -606,6 +714,8 @@ _FUNCS: dict[str, Any] = {
 
 # 供函数取用当前数据索引（求值期间设置）
 _INDEX: dict[str, pd.Index] = {}
+# 供无参指标函数（OBV/ATR/PDI/SAR 等）取用行情列（求值期间设置）
+_ENV: dict[str, Any] = {}
 
 
 def _eval(node: Any, env: dict[str, Any], index: pd.Index) -> Any:
@@ -706,6 +816,8 @@ class Formula:
             if col in bars.columns:
                 env[col] = bars[col].astype(float)
         _INDEX["idx"] = index
+        _ENV.clear()
+        _ENV.update(env)
         try:
             for name, is_output, node in self.statements:
                 value = _eval(node, env, index)
@@ -714,6 +826,7 @@ class Formula:
                     env[name] = value
         finally:
             _INDEX.pop("idx", None)
+            _ENV.clear()
         out_cols = {name: env[name] for name, is_output, _ in self.statements if is_output and name}
         return pd.DataFrame(out_cols, index=index)
 

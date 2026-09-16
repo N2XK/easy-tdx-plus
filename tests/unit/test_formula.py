@@ -237,3 +237,40 @@ def test_boll_matches_indicator() -> None:
     pd.testing.assert_series_equal(out["MID"], expect["boll_mid"], check_names=False)
     pd.testing.assert_series_equal(out["UP"], expect["boll_upper"], check_names=False)
     pd.testing.assert_series_equal(out["LO"], expect["boll_lower"], check_names=False)
+
+
+def test_obv() -> None:
+    close = [10.0, 11.0, 10.0, 12.0, 12.0]
+    bars = pd.DataFrame(
+        {"close": close, "vol": [1.0, 2.0, 3.0, 4.0, 5.0], "high": close, "low": close}
+    )
+    out = evaluate("O: OBV();", bars)
+    assert out["O"].tolist() == [0.0, 2.0, -1.0, 3.0, 3.0]
+
+
+def test_tr_and_atr() -> None:
+    bars = _bars()
+    out = evaluate("T: TR(); A: ATR(2);", bars)
+    close = bars["close"].tolist()
+    assert out["T"].iloc[0] == pytest.approx(2.0)  # high-low = (c+1)-(c-1)
+    prev = close[0]
+    assert out["T"].iloc[1] == pytest.approx(max(2.0, abs(11 + 1 - prev), abs(11 - 1 - prev)))
+    assert pd.isna(out["A"].iloc[0])
+    assert out["A"].iloc[1] == pytest.approx((out["T"].iloc[0] + out["T"].iloc[1]) / 2)
+
+
+def test_dmi_family() -> None:
+    bars = _long_bars()
+    out = evaluate("P: PDI(14); M: MDI(14); A: ADX(14); R: ADXR(14);", bars)
+    for col in ("P", "M", "A"):
+        vals = out[col].iloc[14:]
+        assert (vals >= 0).all() and (vals <= 100).all()
+    assert out["R"].iloc[-1] == pytest.approx((out["A"].iloc[-1] + out["A"].iloc[-15]) / 2)
+
+
+def test_sar_structural() -> None:
+    bars = _long_bars()
+    out = evaluate("S: SAR(4,2,20);", bars)
+    s = out["S"]
+    assert s.iloc[0] == bars["low"].iloc[0]
+    assert s.iloc[1:].notna().all()

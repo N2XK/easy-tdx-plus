@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -157,3 +158,86 @@ def test_aliases() -> None:
     pd.testing.assert_series_equal(
         out["S"], bars["close"].rolling(3).std(ddof=0), check_names=False
     )
+
+
+def _swing_bars() -> pd.DataFrame:
+    close = [10.0, 12.0, 8.0, 12.0, 8.0, 13.0, 7.0]
+    return pd.DataFrame({"close": close, "high": close, "low": close, "vol": [1.0] * 7})
+
+
+def test_zig_and_swings() -> None:
+    out = evaluate(
+        "Z: ZIG(CLOSE,10); P: PEAK(CLOSE,10,1); T: TROUGH(CLOSE,10,1); "
+        "PB: PEAKBARS(CLOSE,10,1); TB: TROUGHBARS(CLOSE,10,1);",
+        _swing_bars(),
+    )
+    assert pd.isna(out["Z"].iloc[0])
+    assert out["Z"].tolist()[1:] == [12.0, 8.0, 12.0, 8.0, 13.0, 13.0]
+    assert out["P"].iloc[1] == 12.0 and out["P"].iloc[5] == 13.0
+    assert out["T"].iloc[4] == 8.0
+    assert out["PB"].iloc[6] == 1.0
+    assert out["TB"].iloc[6] == 2.0
+
+
+def test_peak_m_back() -> None:
+    out = evaluate("P2: PEAK(CLOSE,10,2);", _swing_bars())
+    assert out["P2"].iloc[3] == 12.0
+    assert out["P2"].iloc[5] == 12.0
+
+
+def _long_bars(n: int = 40) -> pd.DataFrame:
+    close = [10 + (i % 7) + (i % 3) * 0.5 for i in range(n)]
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": [c + 1 for c in close],
+            "low": [c - 0.5 for c in close],
+            "close": close,
+            "vol": [100.0 + i for i in range(n)],
+        }
+    )
+
+
+def test_macd_matches_indicator() -> None:
+    from easy_tdx.derive import macd as ind_macd
+
+    bars = _long_bars()
+    out = evaluate(
+        "DIF: EMA(CLOSE,12)-EMA(CLOSE,26); DEA: EMA(DIF,9); M: (DIF-DEA)*2;", bars
+    )
+    expect = ind_macd(bars["close"])
+    pd.testing.assert_series_equal(out["DIF"], expect["dif"], check_names=False)
+    pd.testing.assert_series_equal(out["DEA"], expect["dea"], check_names=False)
+    pd.testing.assert_series_equal(out["M"], expect["macd"], check_names=False)
+
+
+def test_kdj_matches_indicator() -> None:
+    from easy_tdx.derive import kdj as ind_kdj
+
+    bars = _long_bars()
+    out = evaluate(
+        "RSV:= (CLOSE-LLV(LOW,9))/(HHV(HIGH,9)-LLV(LOW,9))*100; "
+        "K: SMA(RSV,3,1); D: SMA(K,3,1); J: 3*K-2*D;",
+        bars,
+    )
+    expect = ind_kdj(bars["high"], bars["low"], bars["close"])
+    for col, key in (("K", "k"), ("D", "d"), ("J", "j")):
+        assert np.allclose(
+            out[col].iloc[36:].to_numpy(),
+            expect[key].iloc[36:].to_numpy(),
+            rtol=1e-4,
+            atol=1e-3,
+        )
+
+
+def test_boll_matches_indicator() -> None:
+    from easy_tdx.derive import boll as ind_boll
+
+    bars = _long_bars()
+    out = evaluate(
+        "MID: MA(CLOSE,20); UP: MID+2*STD(CLOSE,20); LO: MID-2*STD(CLOSE,20);", bars
+    )
+    expect = ind_boll(bars["close"])
+    pd.testing.assert_series_equal(out["MID"], expect["boll_mid"], check_names=False)
+    pd.testing.assert_series_equal(out["UP"], expect["boll_upper"], check_names=False)
+    pd.testing.assert_series_equal(out["LO"], expect["boll_lower"], check_names=False)

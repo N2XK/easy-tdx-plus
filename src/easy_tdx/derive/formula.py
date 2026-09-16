@@ -7,7 +7,7 @@
 - 函数：REF MA EMA SMA SUM HHV LLV STD COUNT CROSS ABS MAX MIN IF RSI BARSLAST
   BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
   UPNDAY DOWNNDAY SLOPE VAR DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
-  BETWEEN（及别名 IFF AVERAGE STDDEV）
+  BETWEEN ZIG PEAK TROUGH PEAKBARS TROUGHBARS（及别名 IFF AVERAGE STDDEV）
 
 用法::
 
@@ -454,6 +454,104 @@ def _fn_between(x: Any, a: Any, b: Any) -> pd.Series:
     return ((s >= _series(a, _INDEX["idx"])) & (s <= _series(b, _INDEX["idx"]))).astype("float64")
 
 
+def _zigzag(vals: np.ndarray, pct: float) -> list[tuple[int, float, str]]:
+    """百分比阈值之字转向：返回已确认的摆动点 (索引, 值, 'H'/'L')。"""
+    n = len(vals)
+    pivots: list[tuple[int, float, str]] = []
+    if n == 0:
+        return pivots
+    thr = pct / 100.0
+    hi = lo = vals[0]
+    hi_i = lo_i = 0
+    direction = 0
+    ext_val = vals[0]
+    ext_i = 0
+    i = 0
+    while i < n and direction == 0:
+        v = vals[i]
+        if not np.isnan(v):
+            if v > hi:
+                hi, hi_i = v, i
+            if v < lo:
+                lo, lo_i = v, i
+            if hi >= vals[0] * (1 + thr):
+                direction, ext_val, ext_i = 1, hi, hi_i
+            elif lo <= vals[0] * (1 - thr):
+                direction, ext_val, ext_i = -1, lo, lo_i
+        i += 1
+    if direction == 0:
+        return pivots
+    for j in range(i, n):
+        v = vals[j]
+        if np.isnan(v):
+            continue
+        if direction == 1:
+            if v > ext_val:
+                ext_val, ext_i = v, j
+            elif v <= ext_val * (1 - thr):
+                pivots.append((ext_i, ext_val, "H"))
+                direction, ext_val, ext_i = -1, v, j
+        else:
+            if v < ext_val:
+                ext_val, ext_i = v, j
+            elif v >= ext_val * (1 + thr):
+                pivots.append((ext_i, ext_val, "L"))
+                direction, ext_val, ext_i = 1, v, j
+    return pivots
+
+
+def _swing_series(x: Any, n: Any, m: Any, kind: str, bars: bool) -> pd.Series:
+    vals = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    swings = [(i, v) for i, v, k in _zigzag(vals, float(n)) if k == kind]
+    m = int(m)
+    out = np.full(len(vals), np.nan)
+    avail: list[tuple[int, float]] = []
+    p = 0
+    for i in range(len(vals)):
+        while p < len(swings) and swings[p][0] <= i:
+            avail.append(swings[p])
+            p += 1
+        if len(avail) >= m:
+            idx_, val_ = avail[-m]
+            out[i] = i - idx_ if bars else val_
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_zig(x: Any, n: Any) -> pd.Series:
+    """百分比之字转向：输出最近已确认摆动点值的阶梯保持线。"""
+    vals = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    pivots = _zigzag(vals, float(n))
+    out = np.full(len(vals), np.nan)
+    current = np.nan
+    k = 0
+    for i in range(len(vals)):
+        while k < len(pivots) and pivots[k][0] <= i:
+            current = pivots[k][1]
+            k += 1
+        out[i] = current
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_peak(x: Any, n: Any, m: Any = 1) -> pd.Series:
+    """前 M 个（自当前回溯）之字峰的值。"""
+    return _swing_series(x, n, m, "H", bars=False)
+
+
+def _fn_trough(x: Any, n: Any, m: Any = 1) -> pd.Series:
+    """前 M 个（自当前回溯）之字谷的值。"""
+    return _swing_series(x, n, m, "L", bars=False)
+
+
+def _fn_peakbars(x: Any, n: Any, m: Any = 1) -> pd.Series:
+    """前 M 个之字峰距今的周期数。"""
+    return _swing_series(x, n, m, "H", bars=True)
+
+
+def _fn_troughbars(x: Any, n: Any, m: Any = 1) -> pd.Series:
+    """前 M 个之字谷距今的周期数。"""
+    return _swing_series(x, n, m, "L", bars=True)
+
+
 _FUNCS: dict[str, Any] = {
     "REF": _fn_ref,
     "MA": _fn_ma,
@@ -495,6 +593,11 @@ _FUNCS: dict[str, Any] = {
     "INTPART": _fn_intpart,
     "ROUND": _fn_round,
     "BETWEEN": _fn_between,
+    "ZIG": _fn_zig,
+    "PEAK": _fn_peak,
+    "TROUGH": _fn_trough,
+    "PEAKBARS": _fn_peakbars,
+    "TROUGHBARS": _fn_troughbars,
     # 别名
     "IFF": _fn_if,
     "AVERAGE": _fn_ma,

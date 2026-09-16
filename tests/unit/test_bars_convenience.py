@@ -237,3 +237,72 @@ def test_get_recent_minute_time_data_empty(monkeypatch: pytest.MonkeyPatch) -> N
     c = TdxClient(host="127.0.0.1")
     monkeypatch.setattr(c, "get_bars", lambda *a, **k: pd.DataFrame())
     assert c.get_recent_minute_time_data(Market.SH, "600519").empty
+
+
+def _txn(dts: list[str], vol: int = 1) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "datetime": pd.to_datetime(dts),
+            "price": 9.0,
+            "vol": vol,
+            "buyorsell": 1,
+            "unknown_last": 0,
+        }
+    )
+
+
+def test_get_history_transaction_all_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = _client()
+    pages = {
+        0: _txn([f"2024-01-02 14:{i:02d}" for i in range(10, 0, -1)]),
+        10: _txn(["2024-01-02 09:31", "2024-01-02 09:30"]),
+    }
+
+    def fake(market: Market, code: str, date: int, start: int, count: int = 800) -> pd.DataFrame:
+        return pages.get(start, _txn([]))
+
+    monkeypatch.setattr(c, "get_history_transaction_data", fake)
+    df = c.get_history_transaction_all(Market.SZ, "000001", 20240102, count=10)
+    assert len(df) == 12
+    assert df["datetime"].is_monotonic_increasing
+    assert df["datetime"].iloc[0] == pd.Timestamp("2024-01-02 09:30")
+
+
+def test_get_history_transaction_all_keeps_identical_ticks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    c = _client()
+    calls: list[int] = []
+
+    def fake(market: Market, code: str, date: int, start: int, count: int = 800) -> pd.DataFrame:
+        calls.append(start)
+        return _txn(["2024-01-02 09:30"] * 2, vol=5) if start == 0 else _txn([])
+
+    monkeypatch.setattr(c, "get_history_transaction_data", fake)
+    df = c.get_history_transaction_all(Market.SZ, "000001", 20240102, count=2)
+    assert len(df) == 2
+    assert calls == [0, 2]
+
+
+def test_get_history_transaction_all_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = _client()
+    monkeypatch.setattr(
+        c, "get_history_transaction_data", lambda *a, **k: pd.DataFrame()
+    )
+    assert c.get_history_transaction_all(Market.SZ, "000001", 20240102).empty
+
+
+def test_async_get_history_transaction_all_paginates(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = AsyncTdxClient(host="127.0.0.1")
+
+    async def fake(
+        market: Market, code: str, date: int, start: int, count: int = 800
+    ) -> pd.DataFrame:
+        if start == 0:
+            return _txn([f"2024-01-02 14:{i:02d}" for i in range(10, 0, -1)])
+        return _txn([])
+
+    monkeypatch.setattr(c, "get_history_transaction_data", fake)
+    df = asyncio.run(c.get_history_transaction_all(Market.SZ, "000001", 20240102, count=10))
+    assert len(df) == 10
+    assert df["datetime"].is_monotonic_increasing

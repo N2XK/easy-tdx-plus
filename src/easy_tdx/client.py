@@ -874,6 +874,29 @@ class TdxClient:
         )
         return _merge_txn_datetime(df, date)
 
+    def get_history_transaction_all(
+        self, market: Market, code: str, date: int, count: int = 800
+    ) -> pd.DataFrame:
+        """获取某历史日的**全部**逐笔成交（自动分页）。
+
+        免去了 g3tic/g4tic `.htc` 全市场大文件解析：直接按 (日期, 个股) 拉取，
+        实测服务器可回溯多年。同一时刻的完全相同成交为真实数据，故不去重。
+        """
+        frames: list[pd.DataFrame] = []
+        start = 0
+        while True:
+            page = self.get_history_transaction_data(market, code, date, start, count)
+            if page is None or page.empty:
+                break
+            frames.append(page)
+            start += len(page)
+            if len(page) < count:
+                break
+        if not frames:
+            return pd.DataFrame()
+        out = pd.concat(frames, ignore_index=True)
+        return out.sort_values("datetime").reset_index(drop=True)
+
     # ------------------------------------------------------------------ #
     # 财务 / 公司
     # ------------------------------------------------------------------ #
@@ -1818,6 +1841,24 @@ class AsyncTdxClient:
             )
         )
         return _merge_txn_datetime(df, date)
+
+    async def get_history_transaction_all(
+        self, market: Market, code: str, date: int, count: int = 800
+    ) -> pd.DataFrame:
+        frames: list[pd.DataFrame] = []
+        start = 0
+        while True:
+            page = await self.get_history_transaction_data(market, code, date, start, count)
+            if page is None or page.empty:
+                break
+            frames.append(page)
+            start += len(page)
+            if len(page) < count:
+                break
+        if not frames:
+            return pd.DataFrame()
+        out = pd.concat(frames, ignore_index=True)
+        return out.sort_values("datetime").reset_index(drop=True)
 
     async def get_xdxr_info(self, market: Market, code: str) -> pd.DataFrame:
         return _to_df(await self._execute(GetXdxrInfoCmd(market, code)))

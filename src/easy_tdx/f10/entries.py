@@ -53,5 +53,6 @@ ENTRY_ALT_DIVIDEND_OVERVIEW = "TdxSharePCCW.tdxf10_gg_fhrz"
 ENTRY_ALT_DIVIDEND_VIEWER = "TdxSharePCCW.tdxf10_gg_sj"
 ENTRY_ALT_INDUSTRY_EVENTS = "TdxSharePCCW.skef10_hy_zxdt_hyzysj"
 ENTRY_ALT_BOARD_BASIC = "TdxSharePCCW.skef10_bk_cpbd_jczl"
+ENTRY_ALT_NORTHBOUND = "TdxSharePCCW.tdxf10_gg_zlcc"
 
 MARKET_TO_ID = {"sz": 0, "sh": 1, "bj": 2}

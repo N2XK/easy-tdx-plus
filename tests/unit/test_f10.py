@@ -235,6 +235,9 @@ def test_alt_f10_extra_entries_params() -> None:
     c.board_basic_info("001", "880976")
     assert fake.calls[-1][1]["Params"] == ["001", "880976", ""]
 
+    c.northbound_funds("000001", "20241231")
+    assert fake.calls[-1][1]["Params"] == ["000001", "bszj", "20241231", "0", "0", "0"]
+
 
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")

@@ -34,6 +34,7 @@ from .entries import (
     ENTRY_ALT_INSTITUTIONAL_DATES,
     ENTRY_ALT_INSTITUTIONAL_DETAIL,
     ENTRY_ALT_INSTITUTIONAL_PRICE,
+    ENTRY_ALT_NORTHBOUND,
     ENTRY_ALT_RESEARCH_CONSENSUS,
     ENTRY_ALT_SHARE_CAPITAL,
     ENTRY_ALT_THEME_BOARDS,
@@ -197,3 +198,10 @@ class AltF10Client(F10Client):
     def board_basic_info(self, branch: str, code: str) -> F10Response:
         """板块基础资料（``skef10_bk_cpbd_jczl``，branch 如 001，code 如 880976）。"""
         return self.params(ENTRY_ALT_BOARD_BASIC, str(branch), str(code), "")
+
+    def northbound_funds(self, code: str, date: str = "") -> F10Response:
+        """北向持股（``zlcc`` / ``bszj``）：日期 / 占比% / 持股数 / 变动 等。
+
+        注意：extras 必须为非空（此处传 "0"），否则服务器返回 -1005。
+        """
+        return self.params(ENTRY_ALT_NORTHBOUND, _code6(code), "bszj", date, "0", "0", "0")

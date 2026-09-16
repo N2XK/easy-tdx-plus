@@ -13,11 +13,18 @@ from ..models.configdata import (
     SpBlock,
     TdxAdr,
     TdxAhRate,
+    TdxBjCode,
     TdxBk,
+    TdxBroker,
     TdxChain,
+    TdxCodeName,
+    TdxConcept,
     TdxHy,
+    TdxIndexName,
+    TdxIndustryNode,
     TdxStat,
     TdxStat2,
+    TdxStockPinyin,
     TdxXgsg,
     TdxZs,
 )
@@ -295,6 +302,164 @@ def parse_named_blocks(data: bytes) -> list[NamedBlock]:
             out.append(current)
         elif current is not None:
             current.codes.append(line)
+    return out
+
+
+def parse_brokers(data: bytes) -> list[TdxBroker]:
+    """解析 brkcomp.dat → 券商/机构名录（``id|简称|全称``）。"""
+    out: list[TdxBroker] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 3 or f[0] == "":
+            continue
+        out.append(TdxBroker(id=_to_int(f[0]), short=f[1], full=f[2]))
+    return out
+
+
+def parse_simple_pairs(data: bytes, sep: str = _FIELD_SEP) -> list[tuple[str, str]]:
+    """解析 ``代码<sep>名称`` 两列文件（tdxsbzs.cfg 等）。"""
+    out: list[tuple[str, str]] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(sep)
+        if len(f) < 2 or f[0] == "":
+            continue
+        out.append((f[0], f[1]))
+    return out
+
+
+def parse_ini(data: bytes) -> dict[str, dict[str, str]]:
+    """解析 INI 风格配置（hqrule.dat / tend_std.cfg / neednote.dat）。"""
+    sections: dict[str, dict[str, str]] = {}
+    current = ""
+    for ln in _lines(_decode_gbk(data)):
+        line = ln.strip()
+        if line == "" or line.startswith(";"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1]
+            sections.setdefault(current, {})
+            continue
+        key, sep, value = line.partition("=")
+        if sep:
+            sections.setdefault(current, {})[key.strip()] = value.strip()
+    return sections
+
+
+def parse_hk_zs_weight(data: bytes) -> list[tuple[str, float]]:
+    """解析 hkzsinfo.cfg → 港股指数成分权重（``QZi=代码,权重``）。"""
+    out: list[tuple[str, float]] = []
+    for section in parse_ini(data).values():
+        for key, value in section.items():
+            if not key.upper().startswith("QZ"):
+                continue
+            parts = value.split(",")
+            if len(parts) >= 2 and parts[0]:
+                out.append((parts[0], _to_float(parts[1])))
+    return out
+
+
+def parse_csrc_industries(data: bytes) -> list[TdxIndustryNode]:
+    """解析 incon.dat → 证监会行业分类（``代码|名称``，首行 #ZJHHY 为段标记）。"""
+    out: list[TdxIndustryNode] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 2 or f[0] == "":
+            continue
+        code = f[0]
+        level = 1 if len(code) <= 1 else (2 if len(code) <= 3 else 3)
+        out.append(TdxIndustryNode(code=code, name=f[1], level=level))
+    return out
+
+
+def parse_index_names(data: bytes) -> list[TdxIndexName]:
+    """解析 ilong.dat → 指数代码名称（``市场|代码||名称``）。"""
+    out: list[TdxIndexName] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 4 or f[1] == "":
+            continue
+        out.append(TdxIndexName(market=_to_int(f[0]), code=f[1], name=f[3]))
+    return out
+
+
+def parse_stock_pinyin(data: bytes) -> list[TdxStockPinyin]:
+    """解析 hspy.dat → 代码拼音缩写（``市场|代码|拼音``）。"""
+    out: list[TdxStockPinyin] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 3 or f[1] == "":
+            continue
+        out.append(TdxStockPinyin(market=_to_int(f[0]), code=f[1], pinyin=f[2]))
+    return out
+
+
+def parse_code_name_table(data: bytes) -> list[TdxCodeName]:
+    """解析 pttab.dat → 代码名称表（``市场,代码,名称``）。"""
+    out: list[TdxCodeName] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(",")
+        if len(f) < 3 or f[1] == "":
+            continue
+        out.append(TdxCodeName(market=_to_int(f[0]), code=f[1], name=f[2]))
+    return out
+
+
+def parse_bj_code_map(data: bytes) -> list[TdxBjCode]:
+    """解析 addedcode_bj.cfg → 北交所新旧代码对照（``市场|旧码|新码|名称|日期``）。"""
+    out: list[TdxBjCode] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#") or _FIELD_SEP not in ln:
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 4 or f[1] == "" or f[2] == "":
+            continue
+        out.append(
+            TdxBjCode(
+                market=_to_int(f[0]),
+                old_code=f[1],
+                new_code=f[2],
+                name=f[3],
+                date=_field(f, 4),
+            )
+        )
+    return out
+
+
+def parse_concept_map(data: bytes) -> list[TdxConcept]:
+    """解析 tdxhkag.cfg / tdxmgag.cfg → 港股/美股 个股 ↔ 概念/行业映射。
+
+    字段：``代码|名称|通达信行业|行业名||板块代码|板块名|扩展代码|``。
+    """
+    out: list[TdxConcept] = []
+    for ln in _lines(_decode_gbk(data)):
+        if ln == "" or ln.startswith("#"):
+            continue
+        f = ln.split(_FIELD_SEP)
+        if len(f) < 7 or f[0] == "":
+            continue
+        out.append(
+            TdxConcept(
+                code=f[0],
+                name=f[1],
+                tdx_hy=_field(f, 2),
+                hy_name=_field(f, 3),
+                block_code=_field(f, 5),
+                block_name=_field(f, 6),
+                ext_code=_field(f, 7),
+            )
+        )
     return out
 
 

@@ -6,7 +6,17 @@ import pytest
 
 from easy_tdx import TdxClient
 from easy_tdx.codec.configdata import (
+    parse_bj_code_map,
+    parse_brokers,
+    parse_code_name_table,
+    parse_concept_map,
+    parse_csrc_industries,
+    parse_hk_zs_weight,
+    parse_index_names,
+    parse_ini,
     parse_named_blocks,
+    parse_simple_pairs,
+    parse_stock_pinyin,
     parse_tdx_adr,
     parse_tdx_ah_rate,
     parse_tdx_chain,
@@ -58,6 +68,37 @@ def test_parse_holidays() -> None:
     out = parse_tdx_holidays(data)
     assert out[2024] == ["0101", "0210", "0211", "0212"]
     assert out[2025] == ["0101"]
+
+
+def test_parse_extra_text_files() -> None:
+    assert parse_brokers(_gbk("1|巴克莱|巴克莱亚洲有限公司\r\n"))[0].full == "巴克莱亚洲有限公司"
+    assert parse_simple_pairs(_gbk("899001|三板成指成份股\r\n"))[0] == ("899001", "三板成指成份股")
+    assert parse_hk_zs_weight(_gbk("[HSI_QZ]\r\nQZ1=00001,1.10\r\n"))[0] == ("00001", 1.10)
+    nodes = parse_csrc_industries(_gbk("#ZJHHY\r\nA|农、林、牧、渔业\r\nA01|农业\r\n"))
+    assert (nodes[0].code, nodes[0].level) == ("A", 1)
+    assert (nodes[1].code, nodes[1].level) == ("A01", 2)
+    assert (
+        parse_index_names(_gbk("62|CES100||中华港股通精选100\r\n"))[0].name == "中华港股通精选100"
+    )
+    assert parse_stock_pinyin(_gbk("0|002839|ZJGH\r\n"))[0].pinyin == "ZJGH"
+    assert parse_code_name_table(_gbk("0,000003,深金田A\r\n"))[0].name == "深金田A"
+
+
+def test_parse_bj_and_concept() -> None:
+    bj = parse_bj_code_map(
+        _gbk("000000,0,346,20260916,\r\n44|832000|920000|安徽凤凰(已切换)|20251009\r\n")
+    )
+    assert len(bj) == 1 and bj[0].old_code == "832000" and bj[0].new_code == "920000"
+    con = parse_concept_map(_gbk("AAPL|苹果电脑||苹果概念||880574|美股-苹果概念|US0219|\r\n"))
+    assert con[0].block_name == "美股-苹果概念" and con[0].ext_code == "US0219"
+
+
+def test_parse_ini() -> None:
+    ini = parse_ini(
+        _gbk("[Data]\r\nRecentCFETSHoliday=20260101,20260102,\r\nHSXS3Breed=706080\r\n")
+    )
+    assert ini["Data"]["HSXS3Breed"] == "706080"
+    assert ini["Data"]["RecentCFETSHoliday"].startswith("20260101")
 
 
 def test_client_zhb_getters(monkeypatch: pytest.MonkeyPatch) -> None:

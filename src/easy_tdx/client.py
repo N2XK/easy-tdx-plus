@@ -24,8 +24,18 @@ from ._df import (
 from .codec.block import parse_block_dat
 from .codec.configdata import (
     fill_block_index_with_alias,
+    parse_bj_code_map,
+    parse_brokers,
+    parse_code_name_table,
+    parse_concept_map,
+    parse_csrc_industries,
+    parse_hk_zs_weight,
+    parse_index_names,
+    parse_ini,
     parse_named_blocks,
+    parse_simple_pairs,
     parse_spblock,
+    parse_stock_pinyin,
     parse_tdx_adr,
     parse_tdx_ah_rate,
     parse_tdx_chain,
@@ -1145,7 +1155,8 @@ class TdxClient:
 
         Args:
             filename: zhb.zip 成员名；常用 ``jjblock.dat``（基金）、``mgblock.dat``（美股）、
-                ``hkblock.dat``（港股）、``csiblock.dat``（中证指数）。
+                ``hkblock.dat``（港股）、``csiblock.dat``（中证）、``ukblock.dat``（英股）、
+                ``sgxblock.dat``（新交所）、``sbblock.dat``（三板）。
         """
         blocks = parse_named_blocks(self._zhb_member(filename))
         rows = [{"block": b.name, "code": c} for b in blocks for c in b.codes]
@@ -1160,6 +1171,65 @@ class TdxClient:
             for mmdd in days
         ]
         return pd.DataFrame(rows, columns=["year", "mmdd", "date"])
+
+    def get_brokers(self) -> pd.DataFrame:
+        """券商/机构名录（brkcomp.dat）：id / short / full。"""
+        return _to_df(parse_brokers(self._zhb_member("brkcomp.dat")))
+
+    def get_tdx_zs3(self) -> pd.DataFrame:
+        """板块/指数定义（tdxzs3.cfg，含地域/风格等）。"""
+        return _to_df(parse_tdxzs(self._zhb_member("tdxzs3.cfg")))
+
+    def get_tdx_dszs(self) -> pd.DataFrame:
+        """港股等指数定义（tdxdszs.cfg）。"""
+        return _to_df(parse_tdxzs(self._zhb_member("tdxdszs.cfg")))
+
+    def get_sb_index_names(self) -> pd.DataFrame:
+        """三板指数名称（tdxsbzs.cfg）：code / name。"""
+        rows = parse_simple_pairs(self._zhb_member("tdxsbzs.cfg"))
+        return pd.DataFrame(rows, columns=["code", "name"])
+
+    def get_hk_index_weights(self) -> pd.DataFrame:
+        """港股指数成分权重（hkzsinfo.cfg）：code / weight。"""
+        rows = parse_hk_zs_weight(self._zhb_member("hkzsinfo.cfg"))
+        return pd.DataFrame(rows, columns=["code", "weight"])
+
+    def get_csrc_industries(self) -> pd.DataFrame:
+        """证监会行业分类（incon.dat）：code / name / level。"""
+        return _to_df(parse_csrc_industries(self._zhb_member("incon.dat")))
+
+    def get_index_names(self) -> pd.DataFrame:
+        """指数代码名称（ilong.dat）：market / code / name。"""
+        return _to_df(parse_index_names(self._zhb_member("ilong.dat")))
+
+    def get_stock_pinyin(self) -> pd.DataFrame:
+        """代码拼音缩写（hspy.dat）：market / code / pinyin。"""
+        return _to_df(parse_stock_pinyin(self._zhb_member("hspy.dat")))
+
+    def get_code_name_table(self) -> pd.DataFrame:
+        """代码名称表（pttab.dat）：market / code / name。"""
+        return _to_df(parse_code_name_table(self._zhb_member("pttab.dat")))
+
+    def get_bj_code_map(self) -> pd.DataFrame:
+        """北交所新旧代码对照（addedcode_bj.cfg）：market/old_code/new_code/name/date。"""
+        return _to_df(parse_bj_code_map(self._zhb_member("addedcode_bj.cfg")))
+
+    def get_hk_stock_concepts(self) -> pd.DataFrame:
+        """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""
+        return _to_df(parse_concept_map(self._zhb_member("tdxhkag.cfg")))
+
+    def get_us_stock_concepts(self) -> pd.DataFrame:
+        """美股个股 ↔ 概念/行业映射（tdxmgag.cfg）。"""
+        return _to_df(parse_concept_map(self._zhb_member("tdxmgag.cfg")))
+
+    def get_zhb_config(self, filename: str) -> dict[str, dict[str, str]]:
+        """通用 INI 配置读取（hqrule.dat / tend_std.cfg / neednote.dat）。
+
+        Returns:
+            ``{section: {key: value}}``。例如 neednote.dat 的
+            ``["Data"]["RecentCFETSHoliday"]`` 为各市场节假日。
+        """
+        return parse_ini(self._zhb_member(filename))
 
     # ------------------------------------------------------------------ #
     # 派生计算（复权 / 基础指标）
@@ -2180,13 +2250,70 @@ class AsyncTdxClient:
 
     async def get_tdx_holidays(self) -> pd.DataFrame:
         """通达信内嵌节假日表（needini.dat）。"""
-        holidays = parse_tdx_holidays((await self.get_zhb_files()).get("needini.dat", b""))
+        holidays = parse_tdx_holidays(await self._zhb_member_async("needini.dat"))
         rows = [
             {"year": year, "mmdd": mmdd, "date": f"{year}-{mmdd[:2]}-{mmdd[2:]}"}
             for year, days in holidays.items()
             for mmdd in days
         ]
         return pd.DataFrame(rows, columns=["year", "mmdd", "date"])
+
+    async def _zhb_member_async(self, filename: str) -> bytes:
+        return (await self.get_zhb_files()).get(filename, b"")
+
+    async def get_brokers(self) -> pd.DataFrame:
+        """券商/机构名录（brkcomp.dat）。"""
+        return _to_df(parse_brokers(await self._zhb_member_async("brkcomp.dat")))
+
+    async def get_tdx_zs3(self) -> pd.DataFrame:
+        """板块/指数定义（tdxzs3.cfg）。"""
+        return _to_df(parse_tdxzs(await self._zhb_member_async("tdxzs3.cfg")))
+
+    async def get_tdx_dszs(self) -> pd.DataFrame:
+        """港股等指数定义（tdxdszs.cfg）。"""
+        return _to_df(parse_tdxzs(await self._zhb_member_async("tdxdszs.cfg")))
+
+    async def get_sb_index_names(self) -> pd.DataFrame:
+        """三板指数名称（tdxsbzs.cfg）。"""
+        rows = parse_simple_pairs(await self._zhb_member_async("tdxsbzs.cfg"))
+        return pd.DataFrame(rows, columns=["code", "name"])
+
+    async def get_hk_index_weights(self) -> pd.DataFrame:
+        """港股指数成分权重（hkzsinfo.cfg）。"""
+        rows = parse_hk_zs_weight(await self._zhb_member_async("hkzsinfo.cfg"))
+        return pd.DataFrame(rows, columns=["code", "weight"])
+
+    async def get_csrc_industries(self) -> pd.DataFrame:
+        """证监会行业分类（incon.dat）。"""
+        return _to_df(parse_csrc_industries(await self._zhb_member_async("incon.dat")))
+
+    async def get_index_names(self) -> pd.DataFrame:
+        """指数代码名称（ilong.dat）。"""
+        return _to_df(parse_index_names(await self._zhb_member_async("ilong.dat")))
+
+    async def get_stock_pinyin(self) -> pd.DataFrame:
+        """代码拼音缩写（hspy.dat）。"""
+        return _to_df(parse_stock_pinyin(await self._zhb_member_async("hspy.dat")))
+
+    async def get_code_name_table(self) -> pd.DataFrame:
+        """代码名称表（pttab.dat）。"""
+        return _to_df(parse_code_name_table(await self._zhb_member_async("pttab.dat")))
+
+    async def get_bj_code_map(self) -> pd.DataFrame:
+        """北交所新旧代码对照（addedcode_bj.cfg）。"""
+        return _to_df(parse_bj_code_map(await self._zhb_member_async("addedcode_bj.cfg")))
+
+    async def get_hk_stock_concepts(self) -> pd.DataFrame:
+        """港股个股 ↔ 概念/行业映射（tdxhkag.cfg）。"""
+        return _to_df(parse_concept_map(await self._zhb_member_async("tdxhkag.cfg")))
+
+    async def get_us_stock_concepts(self) -> pd.DataFrame:
+        """美股个股 ↔ 概念/行业映射（tdxmgag.cfg）。"""
+        return _to_df(parse_concept_map(await self._zhb_member_async("tdxmgag.cfg")))
+
+    async def get_zhb_config(self, filename: str) -> dict[str, dict[str, str]]:
+        """通用 INI 配置读取（hqrule.dat / tend_std.cfg / neednote.dat）。"""
+        return parse_ini(await self._zhb_member_async(filename))
 
     @staticmethod
     async def _async_download_from_host(

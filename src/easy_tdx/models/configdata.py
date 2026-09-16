@@ -133,3 +133,72 @@ class NamedBlock:
 
     name: str
     codes: list[str]
+
+
+@dataclass
+class TdxBroker:
+    """券商/机构名录（来自 brkcomp.dat）。"""
+
+    id: int
+    short: str
+    full: str
+
+
+@dataclass
+class TdxIndustryNode:
+    """证监会行业分类节点（来自 incon.dat）。"""
+
+    code: str  # A / A01 / A0101
+    name: str
+    level: int
+
+
+@dataclass
+class TdxIndexName:
+    """指数代码 → 名称（来自 ilong.dat）。"""
+
+    market: int
+    code: str
+    name: str
+
+
+@dataclass
+class TdxStockPinyin:
+    """代码 → 拼音缩写（来自 hspy.dat）。"""
+
+    market: int
+    code: str
+    pinyin: str
+
+
+@dataclass
+class TdxCodeName:
+    """代码 → 名称（来自 pttab.dat）。"""
+
+    market: int
+    code: str
+    name: str
+
+
+@dataclass
+class TdxBjCode:
+    """北交所新旧代码对照（来自 addedcode_bj.cfg）。"""
+
+    market: int
+    old_code: str
+    new_code: str
+    name: str
+    date: str
+
+
+@dataclass
+class TdxConcept:
+    """港股/美股 个股 ↔ 概念/行业映射（来自 tdxhkag.cfg / tdxmgag.cfg）。"""
+
+    code: str
+    name: str
+    tdx_hy: str
+    hy_name: str
+    block_code: str
+    block_name: str
+    ext_code: str

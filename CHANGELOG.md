@@ -20,7 +20,11 @@
   `0x051d`(指数概况)、`0x053f`(排行榜)、`0x0547`(加密行情)、`0x0fd1`(小走势图)。
 - **离线**：`official` 官方历史数据下载（清单解析 + 断点续传 + 原子写）；`htc` 分笔容器读取（.htc 容器/标的帧 + zlib 块）。
 - **通达信 zhb 配置扩展**：`get_ah_rates`（A/H 对照）、`get_adr_list`（ADR 对照）、`get_industry_chain`（产业链）、
-  `get_named_blocks`（基金/美股/港股/中证板块成分）、`get_tdx_holidays`（内嵌节假日表 1991 至今）。
+  `get_named_blocks`（基金/美股/港股/中证/英股/新交所/三板板块成分）、`get_tdx_holidays`（内嵌节假日表 1991 至今）、
+  `get_brokers`（券商名录）、`get_tdx_zs3`/`get_tdx_dszs`（板块/指数定义）、`get_sb_index_names`、
+  `get_hk_index_weights`、`get_csrc_industries`（证监会行业）、`get_index_names`、`get_stock_pinyin`、
+  `get_code_name_table`、`get_bj_code_map`（北交所新旧代码）、`get_hk_stock_concepts`/`get_us_stock_concepts`、
+  `get_zhb_config`（通用 INI）。
 - **历史财务**：`read_history_financial_df` 快路径；point-in-time 面板（`report_date`）。
 - **派生计算**：仿射复权因子与前后复权日线；基础日线（换手/市值等）；技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比）。
 - **公式解释器**（`easy_tdx.derive.formula`）：50+ 内置函数（REF/MA/EMA/SMA/SUM/HHV/LLV/STD/COUNT/CROSS/RSI/BARSLAST/

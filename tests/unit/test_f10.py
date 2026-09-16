@@ -229,6 +229,12 @@ def test_alt_f10_extra_entries_params() -> None:
     c.dividend_viewer("000001")
     assert fake.calls[-1][1]["Params"] == ["qhgp", "000001", "0", ""]
 
+    c.industry_events(881430)
+    assert fake.calls[-1][1]["Params"] == ["881430", ""]
+
+    c.board_basic_info("001", "880976")
+    assert fake.calls[-1][1]["Params"] == ["001", "880976", ""]
+
 
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")

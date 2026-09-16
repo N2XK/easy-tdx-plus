@@ -17,6 +17,7 @@ from .client import F10Client, _code6
 from .entries import (
     ALT_TQLEX_BASE_URL,
     ENTRY_ALT_BALANCE_SHEET,
+    ENTRY_ALT_BOARD_BASIC,
     ENTRY_ALT_BUSINESS_COMPOSITION,
     ENTRY_ALT_CASHFLOW_STATEMENT,
     ENTRY_ALT_COMPANY_BASIC,
@@ -27,6 +28,7 @@ from .entries import (
     ENTRY_ALT_HOT_TOPIC_OVERVIEW,
     ENTRY_ALT_INCOME_STATEMENT,
     ENTRY_ALT_INDUSTRY_CHAIN,
+    ENTRY_ALT_INDUSTRY_EVENTS,
     ENTRY_ALT_INDUSTRY_RANK,
     ENTRY_ALT_INDUSTRY_VALUATION,
     ENTRY_ALT_INSTITUTIONAL_DATES,
@@ -187,3 +189,11 @@ class AltF10Client(F10Client):
     def dividend_viewer(self, code: str, *, tag: str = "qhgp") -> F10Response:
         """分红查看筛选（``sj``，tag=qhgp，返回 32 行）。"""
         return self.params(ENTRY_ALT_DIVIDEND_VIEWER, tag, _code6(code), "0", "")
+
+    def industry_events(self, industry_code: str) -> F10Response:
+        """行业重要事件（``skef10_hy_zxdt_hyzysj``，入参行业指数代码，返回约 39 行）。"""
+        return self.params(ENTRY_ALT_INDUSTRY_EVENTS, str(industry_code), "")
+
+    def board_basic_info(self, branch: str, code: str) -> F10Response:
+        """板块基础资料（``skef10_bk_cpbd_jczl``，branch 如 001，code 如 880976）。"""
+        return self.params(ENTRY_ALT_BOARD_BASIC, str(branch), str(code), "")

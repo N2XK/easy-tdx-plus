@@ -33,6 +33,7 @@ from .codec.configdata import (
     parse_index_names,
     parse_ini,
     parse_named_blocks,
+    parse_positional,
     parse_simple_pairs,
     parse_spblock,
     parse_stock_pinyin,
@@ -1231,6 +1232,19 @@ class TdxClient:
         """
         return parse_ini(self._zhb_member(filename))
 
+    def get_zhb_positional(self, filename: str, sep: str = "|") -> pd.DataFrame:
+        """通用位置解析任意文本配置（列名 c0..cN），用于未确认字段语义的文件。
+
+        适用于 ``tipinfo.dat`` / ``importzs.cfg`` / ``othersg.cfg`` / ``tdxpkmore.cfg`` 等。
+        """
+        rows = parse_positional(self._zhb_member(filename), sep)
+        if not rows:
+            return pd.DataFrame()
+        width = max(len(r) for r in rows)
+        cols = [f"c{i}" for i in range(width)]
+        padded = [r + [None] * (width - len(r)) for r in rows]
+        return pd.DataFrame(padded, columns=cols)
+
     # ------------------------------------------------------------------ #
     # 派生计算（复权 / 基础指标）
     # ------------------------------------------------------------------ #
@@ -2314,6 +2328,16 @@ class AsyncTdxClient:
     async def get_zhb_config(self, filename: str) -> dict[str, dict[str, str]]:
         """通用 INI 配置读取（hqrule.dat / tend_std.cfg / neednote.dat）。"""
         return parse_ini(await self._zhb_member_async(filename))
+
+    async def get_zhb_positional(self, filename: str, sep: str = "|") -> pd.DataFrame:
+        """通用位置解析任意文本配置（列名 c0..cN）。"""
+        rows = parse_positional(await self._zhb_member_async(filename), sep)
+        if not rows:
+            return pd.DataFrame()
+        width = max(len(r) for r in rows)
+        cols = [f"c{i}" for i in range(width)]
+        padded = [r + [None] * (width - len(r)) for r in rows]
+        return pd.DataFrame(padded, columns=cols)
 
     @staticmethod
     async def _async_download_from_host(

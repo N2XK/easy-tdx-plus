@@ -15,6 +15,7 @@ from easy_tdx.codec.configdata import (
     parse_index_names,
     parse_ini,
     parse_named_blocks,
+    parse_positional,
     parse_simple_pairs,
     parse_stock_pinyin,
     parse_tdx_adr,
@@ -99,6 +100,22 @@ def test_parse_ini() -> None:
     )
     assert ini["Data"]["HSXS3Breed"] == "706080"
     assert ini["Data"]["RecentCFETSHoliday"].startswith("20260101")
+
+
+def test_parse_positional() -> None:
+    rows = parse_positional(_gbk("#comment\r\n0|300727|123285|37000.0|润禾转02\r\n"))
+    assert rows == [["0", "300727", "123285", "37000.0", "润禾转02"]]
+    assert parse_positional(_gbk("\r\n")) == []
+
+
+def test_client_zhb_positional(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = TdxClient(host="127.0.0.1")
+    monkeypatch.setattr(
+        c, "_zhb_member", lambda name: _gbk("0|300727|润禾转02\r\n0|301628|强达转债\r\n")
+    )
+    df = c.get_zhb_positional("othersg.cfg")
+    assert list(df.columns) == ["c0", "c1", "c2"]
+    assert df.iloc[1]["c2"] == "强达转债"
 
 
 def test_client_zhb_getters(monkeypatch: pytest.MonkeyPatch) -> None:

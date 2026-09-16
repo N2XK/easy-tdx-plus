@@ -463,6 +463,21 @@ def parse_concept_map(data: bytes) -> list[TdxConcept]:
     return out
 
 
+def parse_positional(data: bytes, sep: str = _FIELD_SEP) -> list[list[str]]:
+    """通用位置解析：按分隔符切分为行（跳过 # 注释与 [段]）。
+
+    用于尚未确认字段语义的文本配置（tipinfo.dat / importzs.cfg / othersg.cfg /
+    tdxpkmore.cfg 等），以 c0..cN 列暴露原始字段，避免臆测字段名。
+    """
+    rows: list[list[str]] = []
+    for ln in _lines(_decode_gbk(data)):
+        line = ln.strip()
+        if line == "" or line.startswith("#") or line.startswith("["):
+            continue
+        rows.append(line.split(sep))
+    return rows
+
+
 def parse_tdx_holidays(data: bytes) -> dict[int, list[str]]:
     """解析 needini.dat → {年份: [MMDD, ...]}（通达信内嵌节假日表）。"""
     out: dict[int, list[str]] = {}

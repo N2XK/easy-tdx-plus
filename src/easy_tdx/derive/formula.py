@@ -4,7 +4,10 @@
 - 语句：`NAME: expr;`（输出）、`NAME:= expr;`（中间量）、裸表达式
 - 变量：OPEN/HIGH/LOW/CLOSE/VOL/AMOUNT（及别名 O/H/L/C/V）、前期赋值变量
 - 运算符：`+ - * /`、比较 `< > <= >= = <>`、逻辑 `AND OR NOT`
-- 函数：REF MA EMA SMA SUM HHV LLV STD CROSS COUNT ABS MAX MIN IF RSI BARSLAST
+- 函数：REF MA EMA SMA SUM HHV LLV STD COUNT CROSS ABS MAX MIN IF RSI BARSLAST
+  BARSLASTCOUNT BARSCOUNT HHVBARS LLVBARS BACKSET SUMBARS FILTER/TFILTER
+  UPNDAY DOWNNDAY SLOPE VAR DMA CONST SQRT POW LOG LN EXP SIGN MOD INTPART ROUND
+  BETWEEN（及别名 IFF AVERAGE STDDEV）
 
 用法::
 
@@ -20,6 +23,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 __all__ = ["evaluate", "Formula", "FormulaError"]
@@ -259,6 +263,197 @@ def _fn_barslast(c: Any) -> pd.Series:
     return last
 
 
+def _fn_barslastcount(x: Any) -> pd.Series:
+    """连续满足 X 的周期数（含当前）。"""
+    flags = _series(x, _INDEX["idx"]).astype(bool).to_numpy()
+    out = np.zeros(len(flags), dtype="float64")
+    counter = 0
+    for i, flag in enumerate(flags):
+        counter = counter + 1 if flag else 0
+        out[i] = counter
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_bars_count(x: Any) -> pd.Series:
+    """首个有效值到当前的周期数。"""
+    return _series(x, _INDEX["idx"]).notna().cumsum().astype("float64")
+
+
+def _fn_hhvbars(x: Any, n: Any) -> pd.Series:
+    """N 周期内最高值距今的周期数（并列取最近的一次）。"""
+    vals = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    n = int(n)
+    out = np.full(len(vals), np.nan)
+    for i in range(len(vals)):
+        w = vals[max(0, i - n + 1) : i + 1]
+        if w.size == 0 or np.all(np.isnan(w)):
+            continue
+        peaks = np.where(w == np.nanmax(w))[0]
+        out[i] = w.size - 1 - peaks[-1]
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_llvbars(x: Any, n: Any) -> pd.Series:
+    """N 周期内最低值距今的周期数（并列取最近的一次）。"""
+    vals = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    n = int(n)
+    out = np.full(len(vals), np.nan)
+    for i in range(len(vals)):
+        w = vals[max(0, i - n + 1) : i + 1]
+        if w.size == 0 or np.all(np.isnan(w)):
+            continue
+        troughs = np.where(w == np.nanmin(w))[0]
+        out[i] = w.size - 1 - troughs[-1]
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_backset(x: Any, n: Any) -> pd.Series:
+    """X 非 0 时，将当前位置及之前 N-1 个位置置 1。"""
+    cond = _series(x, _INDEX["idx"]).astype(bool).to_numpy()
+    n = int(n)
+    out = np.zeros(len(cond), dtype="float64")
+    for i in range(len(cond)):
+        if cond[i]:
+            out[max(0, i - n + 1) : i + 1] = 1.0
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_sumbars(x: Any, n: Any) -> pd.Series:
+    """向前累加 X 至 >= N 所需的周期数（含当前；累计不足时返回已用全部周期数）。"""
+    vals = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    n = float(n)
+    out = np.full(len(vals), np.nan)
+    for i in range(len(vals)):
+        acc = 0.0
+        for j in range(i, -1, -1):
+            v = vals[j]
+            if not np.isnan(v):
+                acc += v
+            if acc >= n:
+                out[i] = i - j + 1
+                break
+        else:
+            out[i] = i + 1
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_filter(x: Any, n: Any) -> pd.Series:
+    """X 满足输出信号，其后 N 个周期内不再输出（信号本身保留）。"""
+    cond = _series(x, _INDEX["idx"]).astype(bool).to_numpy()
+    n = int(n)
+    out = np.zeros(len(cond), dtype="float64")
+    cooldown = 0
+    for i in range(len(cond)):
+        if cond[i] and cooldown == 0:
+            out[i] = 1.0
+            cooldown = n
+        elif cooldown > 0:
+            cooldown -= 1
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_upnday(x: Any, n: Any) -> pd.Series:
+    """X 连续 N 周期递增。"""
+    inc = _series(x, _INDEX["idx"]).diff() > 0
+    n = int(n)
+    if n <= 1:
+        return inc.astype("float64")
+    return inc.rolling(n - 1).sum().eq(n - 1).astype("float64")
+
+
+def _fn_downnday(x: Any, n: Any) -> pd.Series:
+    """X 连续 N 周期递减。"""
+    dec = _series(x, _INDEX["idx"]).diff() < 0
+    n = int(n)
+    if n <= 1:
+        return dec.astype("float64")
+    return dec.rolling(n - 1).sum().eq(n - 1).astype("float64")
+
+
+def _fn_slope(x: Any, n: Any) -> pd.Series:
+    """N 周期线性回归斜率。"""
+    n = int(n)
+    t = np.arange(n, dtype="float64")
+    t_centered = t - t.mean()
+    denom = (t_centered**2).sum()
+
+    def _slope(w: np.ndarray) -> float:
+        if np.any(np.isnan(w)):
+            return float("nan")
+        return float((t_centered * (w - w.mean())).sum() / denom)
+
+    return _series(x, _INDEX["idx"]).rolling(n).apply(_slope, raw=True)
+
+
+def _fn_var(x: Any, n: Any) -> pd.Series:
+    """N 周期总体方差。"""
+    return _series(x, _INDEX["idx"]).rolling(int(n)).var(ddof=0)
+
+
+def _fn_dma(x: Any, a: Any) -> pd.Series:
+    """动态移动平均：DMA = A*X + (1-A)*DMA[1]。"""
+    s = _series(x, _INDEX["idx"]).to_numpy(dtype="float64")
+    weight = _series(a, _INDEX["idx"]).to_numpy(dtype="float64")
+    out = np.full(len(s), np.nan)
+    prev = np.nan
+    for i in range(len(s)):
+        out[i] = s[i] if np.isnan(prev) else weight[i] * s[i] + (1 - weight[i]) * prev
+        prev = out[i]
+    return pd.Series(out, index=_INDEX["idx"])
+
+
+def _fn_const(x: Any) -> pd.Series:
+    """取最后一个有效值为常量填满全序列。"""
+    s = _series(x, _INDEX["idx"])
+    valid = s.dropna()
+    value = float(valid.iloc[-1]) if len(valid) else np.nan
+    return pd.Series(value, index=_INDEX["idx"])
+
+
+def _fn_sqrt(x: Any) -> pd.Series:
+    s = _series(x, _INDEX["idx"])
+    return np.sqrt(s.where(s >= 0))
+
+
+def _fn_pow(x: Any, y: Any) -> pd.Series:
+    return _series(x, _INDEX["idx"]) ** _series(y, _INDEX["idx"])
+
+
+def _fn_log(x: Any) -> pd.Series:
+    s = _series(x, _INDEX["idx"])
+    return np.log10(s.where(s > 0))
+
+
+def _fn_ln(x: Any) -> pd.Series:
+    s = _series(x, _INDEX["idx"])
+    return np.log(s.where(s > 0))
+
+
+def _fn_exp(x: Any) -> pd.Series:
+    return np.exp(_series(x, _INDEX["idx"]))
+
+
+def _fn_sign(x: Any) -> pd.Series:
+    return pd.Series(np.sign(_series(x, _INDEX["idx"])), index=_INDEX["idx"])
+
+
+def _fn_mod(x: Any, y: Any) -> pd.Series:
+    return _series(x, _INDEX["idx"]) % _series(y, _INDEX["idx"])
+
+
+def _fn_intpart(x: Any) -> pd.Series:
+    return pd.Series(np.trunc(_series(x, _INDEX["idx"])), index=_INDEX["idx"])
+
+
+def _fn_round(x: Any, n: Any = 0) -> pd.Series:
+    return _series(x, _INDEX["idx"]).round(int(n))
+
+
+def _fn_between(x: Any, a: Any, b: Any) -> pd.Series:
+    s = _series(x, _INDEX["idx"])
+    return ((s >= _series(a, _INDEX["idx"])) & (s <= _series(b, _INDEX["idx"]))).astype("float64")
+
+
 _FUNCS: dict[str, Any] = {
     "REF": _fn_ref,
     "MA": _fn_ma,
@@ -276,6 +471,34 @@ _FUNCS: dict[str, Any] = {
     "IF": _fn_if,
     "RSI": _fn_rsi,
     "BARSLAST": _fn_barslast,
+    "BARSLASTCOUNT": _fn_barslastcount,
+    "BARSCOUNT": _fn_bars_count,
+    "HHVBARS": _fn_hhvbars,
+    "LLVBARS": _fn_llvbars,
+    "BACKSET": _fn_backset,
+    "SUMBARS": _fn_sumbars,
+    "FILTER": _fn_filter,
+    "TFILTER": _fn_filter,
+    "UPNDAY": _fn_upnday,
+    "DOWNNDAY": _fn_downnday,
+    "SLOPE": _fn_slope,
+    "VAR": _fn_var,
+    "DMA": _fn_dma,
+    "CONST": _fn_const,
+    "SQRT": _fn_sqrt,
+    "POW": _fn_pow,
+    "LOG": _fn_log,
+    "LN": _fn_ln,
+    "EXP": _fn_exp,
+    "SIGN": _fn_sign,
+    "MOD": _fn_mod,
+    "INTPART": _fn_intpart,
+    "ROUND": _fn_round,
+    "BETWEEN": _fn_between,
+    # 别名
+    "IFF": _fn_if,
+    "AVERAGE": _fn_ma,
+    "STDDEV": _fn_std,
 }
 
 # 供函数取用当前数据索引（求值期间设置）

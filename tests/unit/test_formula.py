@@ -75,3 +75,85 @@ def test_unknown_function_raises() -> None:
 
     with pytest.raises(FormulaError):
         evaluate("X: NOPE(CLOSE);", _bars())
+
+
+def test_barslastcount_and_bars_count() -> None:
+    bars = _bars()
+    out = evaluate("A: BARSLASTCOUNT(CLOSE>11); N: BARSCOUNT(CLOSE);", bars)
+    assert out["A"].tolist() == [0, 0, 1, 0, 1, 2, 3, 4, 5, 6]
+    assert out["N"].tolist() == [float(i + 1) for i in range(len(bars))]
+
+
+def test_hhvbars_llvbars() -> None:
+    bars = _bars()
+    out = evaluate("H: HHVBARS(HIGH,3); L: LLVBARS(LOW,3);", bars)
+    hi = bars["high"].tolist()
+    assert out["H"].iloc[2] == 0.0
+    assert out["H"].iloc[3] == 1.0
+    assert out["L"].iloc[1] == 1.0
+    assert out["H"].iloc[5] == 0.0
+    assert hi[5] == max(hi[3:6])
+
+
+def test_backset() -> None:
+    out = evaluate("B: BACKSET(CLOSE>14,3);", _bars())
+    assert out["B"].tolist() == [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+
+
+def test_sumbars() -> None:
+    bars = _bars()
+    out = evaluate("S: SUMBARS(VOL,250);", bars)
+    assert out["S"][[0, 1, 2, 3]].tolist() == [1.0, 2.0, 3.0, 3.0]
+
+
+def test_filter_and_tfilter_alias() -> None:
+    out = evaluate("F: FILTER(CLOSE>11,2); T: TFILTER(CLOSE>11,2);", _bars())
+    assert out["F"].tolist() == out["T"].tolist()
+    assert out["F"].tolist() == [0, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+
+
+def test_upnday_downnday() -> None:
+    bars = _bars()
+    out = evaluate("U: UPNDAY(CLOSE,3); D: DOWNNDAY(CLOSE,2);", bars)
+    assert out["U"].iloc[8] == 1.0
+    assert out["U"].iloc[2] == 1.0
+    assert out["D"].iloc[3] == 1.0
+    assert out["D"].iloc[9] == 1.0
+
+
+def test_slope_var_math() -> None:
+    out = evaluate("S: SLOPE(CLOSE,2); V: VAR(CLOSE,3);", _bars())
+    assert out["S"].iloc[-1] == pytest.approx(-1.0)
+    assert out["V"].iloc[-1] == pytest.approx(pd.Series([15.0, 16.0, 15.0]).var(ddof=0))
+
+
+def test_dma_and_const() -> None:
+    bars = _bars()
+    out = evaluate("D: DMA(CLOSE,0.5); C: CONST(CLOSE);", bars)
+    close = bars["close"].tolist()
+    assert out["D"].iloc[0] == close[0]
+    assert out["D"].iloc[1] == pytest.approx(0.5 * close[1] + 0.5 * close[0])
+    assert (out["C"] == close[-1]).all()
+
+
+def test_math_builtins() -> None:
+    out = evaluate(
+        "A: SQRT(CLOSE); B: POW(CLOSE,2); "
+        "C: INTPART(CLOSE/2); D: BETWEEN(CLOSE,11,13); E: SIGN(CLOSE-12);",
+        _bars(),
+    )
+    assert out["A"].iloc[0] == pytest.approx(10**0.5)
+    assert out["B"].iloc[0] == pytest.approx(100.0)
+    assert out["C"].iloc[0] == 5.0
+    assert out["D"].iloc[0] == 0.0 and out["D"].iloc[1] == 1.0
+    assert out["E"].tolist() == [-1.0, -1.0, 0.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+
+def test_aliases() -> None:
+    bars = _bars()
+    out = evaluate("A: IFF(CLOSE>11,1,0); B: AVERAGE(CLOSE,2); S: STDDEV(CLOSE,3);", bars)
+    assert out["A"].dtype == float
+    pd.testing.assert_series_equal(out["B"], ind_ma(bars["close"], 2), check_names=False)
+    pd.testing.assert_series_equal(
+        out["S"], bars["close"].rolling(3).std(ddof=0), check_names=False
+    )

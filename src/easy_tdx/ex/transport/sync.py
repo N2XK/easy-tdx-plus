@@ -10,7 +10,6 @@ from ...codec.frame import HEADER_SIZE, decompress_body, parse_header
 from ...config import get_best_ex_host, get_ex_hosts
 from ...exceptions import TdxConnectionError
 from ..commands.get_instrument_count import GetExInstrumentCountCmd
-from ..models import KNOWN_EX_HOSTS
 
 if TYPE_CHECKING:
     from ...commands.base import BaseCommand

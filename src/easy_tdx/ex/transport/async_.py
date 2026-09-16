@@ -5,9 +5,8 @@ from types import TracebackType
 from typing import TYPE_CHECKING, TypeVar
 
 from ...codec.frame import HEADER_SIZE, decompress_body, parse_header
-from ...config import get_best_ex_host, get_ex_hosts
+from ...config import get_best_ex_host
 from ...exceptions import TdxConnectionError
-from ..models import KNOWN_EX_HOSTS
 
 if TYPE_CHECKING:
     from ...commands.base import BaseCommand

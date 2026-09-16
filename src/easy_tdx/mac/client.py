@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 import pandas as pd
 
 from .._df import _to_df
+from ..codec.bitmap import Fields, PresetField
 from ..commands.base import BaseCommand
 from ..config import get_best_host, get_mac_hosts, get_port, get_timeout, save_best_host
 from ..exceptions import TdxConnectionError
@@ -34,7 +35,6 @@ from .commands import (
 )
 from .commands.file_query import FileDownloadCmd, FileListCmd
 from .commands.goods_list import GoodsListCmd
-from ..codec.bitmap import Fields, PresetField
 from .enums import Adjust, BoardType, Category, FilterType, Period, SortOrder, SortType
 from .models import (
     MacBar,

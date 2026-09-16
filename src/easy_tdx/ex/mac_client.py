@@ -13,18 +13,18 @@ import pandas as pd
 
 from .._df import _to_df
 from ..commands.base import BaseCommand
+from ..config import get_best_mac_ex_host, get_mac_ex_hosts, save_best_mac_ex_host
 from ..exceptions import TdxConnectionError
-from .commands.login import MacExLoginCmd
-from .commands.get_instrument_count import GetExInstrumentCountCmd
-from .commands.get_instrument_info import GetExInstrumentInfoCmd
 from ..mac.commands.chart_sampling import ChartSamplingCmd
 from ..mac.commands.symbol_bar import SymbolBarCmd
 from ..mac.commands.symbol_quotes import SymbolQuotesCmd
 from ..mac.commands.symbol_tick_chart import SymbolTickChartCmd
 from ..mac.commands.symbol_transaction import SymbolTransactionCmd
 from ..mac.enums import Adjust, Period, SortOrder, SortType
-from ..config import get_best_mac_ex_host, get_mac_ex_hosts, save_best_mac_ex_host
 from ..mac.models import MacQuoteField
+from .commands.get_instrument_count import GetExInstrumentCountCmd
+from .commands.get_instrument_info import GetExInstrumentInfoCmd
+from .commands.login import MacExLoginCmd
 from .transport.async_ import AsyncExTdxConnection
 from .transport.sync import ExTdxConnection, ping_ex_all
 
@@ -532,7 +532,9 @@ class AsyncMacExClient:
                 if not self._auto_reconnect:
                     raise
                 await self._conn.close()
-                self._conn = AsyncExTdxConnection(self._host, self._port, self._timeout, mac_ex_mode=True)
+                self._conn = AsyncExTdxConnection(
+                    self._host, self._port, self._timeout, mac_ex_mode=True
+                )
                 await self._conn.connect()
                 await self._login()
                 return await self._conn.execute(cmd)

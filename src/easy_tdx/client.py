@@ -394,16 +394,26 @@ def _deserialize_stocks(data: list[dict[str, Any]]) -> list[SecurityInfo]:
     return [SecurityInfo(**{**d, "market": Market(d["market"])}) for d in data]
 
 
+# 缓存格式版本：解析布局变化时递增，自动使旧缓存失效（避免沿用错误解析结果）
+_CACHE_SCHEMA = 2
+
+
 def _load_cache() -> list[SecurityInfo] | None:
     path = _CACHE_DIR / "security_list_all.json"
     if not path.exists():
         return None
     try:
         raw = json.loads(path.read_text("utf-8"))
+        if raw.get("schema") != _CACHE_SCHEMA:
+            return None
         updated = datetime.fromisoformat(raw["updated"])
         if (datetime.now() - updated).total_seconds() > _CACHE_MAX_AGE:
             return None
-        return _deserialize_stocks(raw["data"])
+        stocks = _deserialize_stocks(raw["data"])
+        # 兜底：A 股全量应远多于 1000，异常的少量结果视为损坏缓存
+        if len(stocks) < 1000:
+            return None
+        return stocks
     except Exception:
         return None
 
@@ -411,6 +421,7 @@ def _load_cache() -> list[SecurityInfo] | None:
 def _save_cache(stocks: list[SecurityInfo]) -> None:
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     data = {
+        "schema": _CACHE_SCHEMA,
         "updated": datetime.now().isoformat(),
         "count": len(stocks),
         "data": _serialize_stocks(stocks),

@@ -64,6 +64,10 @@
 
 ### Fixed
 
+- **`get_security_list`(0x044d) 记录布局错误（严重）**：0x044d 已是 **37 字节**记录
+  （`code6+volunit2+name16+...`），代码仍按旧命令 0x0450 的 29 字节解析，导致首条之后
+  code/name 错位乱码、A 股被大量漏掉——`get_security_list_all` 只返回 376 只（实为 5225 只）。
+  现按 37 字节修正，并给列表缓存加 `schema` 版本（自动使旧坏缓存失效）。
 - **分时接口改为 `_execute_std`**：`get_minute_time_data`/`get_history_minute_time_data`
   原先用 `_execute`，主机不响应 0x0fb4（解码失败）时不会自动回退全功能主机；现统一兜底。
 - **`verify_all` 稳定性**：分钟线检查改用 `get_recent_minute_time_data`（不受盘前/非交易日影响），

@@ -1,8 +1,14 @@
 {
   "num_records": 1000,
+  "request_start": 2000,
   "first": {
-    "code": "999999",
-    "name": "上证指数",
-    "pre_close": 3966.171142578125
+    "code": "601579",
+    "name": "会稽山"
+  },
+  "maotai": {
+    "code": "600519",
+    "name": "贵州茅台",
+    "decimal_point": 2,
+    "pre_close": 1272.75
   }
 }

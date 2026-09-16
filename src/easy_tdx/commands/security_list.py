@@ -1,7 +1,10 @@
-"""获取证券列表命令（每页最多1000条，按 start 分页）。
+"""获取证券列表命令（0x044d，每页最多 1000 条，按 start 偏移分页）。
 
-修复 pytdx Bug #2：GBK 解码使用 errors='replace'，截断多字节序列不再崩溃。
-修复 pytdx Bug #3：pre_close 保持使用通达信自定义浮点解码。
+记录为 **37 字节**：``code(6) + volunit(u16) + name(16,GBK) + unk(4) +
+decimal_point(u8) + pre_close(4,TDX float) + unk(4)``。
+
+注意：早期版本误用旧命令 0x0450 的 29 字节布局，导致第一条之后字段全部错位
+（code/name 出现乱码、A 股被大量漏掉）。此处按 0x044d 实际布局修正。
 """
 
 import struct
@@ -12,7 +15,7 @@ from ..models.enums import Market
 from ..models.security import SecurityInfo
 from .base import BaseCommand
 
-_RECORD_SIZE = 29
+_RECORD_SIZE = 37
 
 
 class GetSecurityListCmd(BaseCommand[list[SecurityInfo]]):
@@ -46,7 +49,7 @@ class GetSecurityListCmd(BaseCommand[list[SecurityInfo]]):
                 decimal_point,
                 pre_close_raw,
                 _unknown2,  # 4字节，含义未明
-            ) = struct.unpack("<6sH8s4sBI4s", raw)
+            ) = struct.unpack("<6sH16s4sBI4s", raw)
 
             code = code_bytes.decode("utf-8", errors="replace").rstrip("\x00")
             # Bug #2 修复：errors='replace' 避免截断 GBK 多字节序列时崩溃

@@ -42,22 +42,24 @@ def test_security_count_parse():
 
 
 def test_security_list_parse():
+    """0x044d：37 字节记录（code6+vol2+name16+u4+B+I+u4），无错位。"""
     from easy_tdx.commands.security_list import GetSecurityListCmd
     from easy_tdx.models.enums import Market
 
     body = load_hex("security_list")
-    cmd = GetSecurityListCmd(Market.SH, 0)
-    records = cmd.parse_response(body)
+    records = GetSecurityListCmd(Market.SH, 2000).parse_response(body)
 
     assert len(records) == 1000
+    # 全部记录都应是 6 位数字代码（旧 29 字节布局会大量乱码）
+    assert all(r.code.isdigit() and len(r.code) == 6 for r in records)
+    codes = {r.code for r in records}
+    assert records[0].code == "601579" and "600519" in codes
 
-    r0 = records[0]
-    assert r0.code == "999999"
-    assert r0.name == "上证指数"
-    assert abs(r0.pre_close - 3966.171142578125) < 0.01
-
-    # _raw present and non-empty for every record
-    assert all(len(r._raw) > 0 for r in records)
+    maotai = next(r for r in records if r.code == "600519")
+    assert maotai.name == "贵州茅台"
+    assert maotai.decimal_point == 2
+    assert abs(maotai.pre_close - 1272.75) < 0.01
+    assert all(len(r._raw) == 37 for r in records)
 
 
 def test_security_list_pre_close_uses_tdx_float_for_a_share():
@@ -65,7 +67,7 @@ def test_security_list_pre_close_uses_tdx_float_for_a_share():
     from easy_tdx.models.enums import Market
 
     body = struct.pack("<H", 1) + struct.pack(
-        "<6sH8s4sBI4s",
+        "<6sH16s4sBI4s",
         b"600000",
         100,
         "\u6d66\u53d1\u94f6\u884c".encode("gbk"),

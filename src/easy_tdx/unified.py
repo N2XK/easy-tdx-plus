@@ -21,7 +21,7 @@ from .mac.enums import (
     SortOrder,
     SortType,
 )
-from .models.enums import Market
+from .models.enums import KlineCategory, Market
 
 
 class UnifiedTdxClient:
@@ -163,7 +163,24 @@ class UnifiedTdxClient:
         times: int = 1,
         adjust: Adjust = Adjust.NONE,
     ) -> pd.DataFrame:
-        return self._ensure_mac().get_stock_kline(market, code, period, start, count, times, adjust)
+        """K 线：MAC 优先（支持服务端复权），失败/空时回退标准协议。
+
+        回退结果为**不复权**、字段按标准协议。
+        """
+
+        def _std() -> pd.DataFrame:
+            try:
+                cat = KlineCategory(int(period))
+            except ValueError:
+                return pd.DataFrame()
+            return self._ensure_std().get_bars(self._market(market), code, cat, start, count)
+
+        return self._mac_then_std(
+            lambda: self._ensure_mac().get_stock_kline(
+                market, code, period, start, count, times, adjust
+            ),
+            _std,
+        )
 
     def get_tick_chart(
         self,
@@ -480,7 +497,18 @@ class AsyncUnifiedTdxClient:
         adjust: Adjust = Adjust.NONE,
     ) -> pd.DataFrame:
         mac = await self._ensure_mac()
-        return await mac.get_stock_kline(market, code, period, start, count, times, adjust)
+
+        async def _std() -> pd.DataFrame:
+            try:
+                cat = KlineCategory(int(period))
+            except ValueError:
+                return pd.DataFrame()
+            c = await self._ensure_std()
+            return await c.get_bars(Market(market), code, cat, start, count)
+
+        return await self._mac_then_std(
+            lambda: mac.get_stock_kline(market, code, period, start, count, times, adjust), _std
+        )
 
     async def get_tick_chart(
         self,

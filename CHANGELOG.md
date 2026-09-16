@@ -3,9 +3,9 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.2.0] - 2026-09-16
 
-自基线（原作者 `4820b4a`）以来的累积变更。
+相对上游基线 `4820b4a` 的累积变更（首个独立发布版本）。
 
 ### Added
 

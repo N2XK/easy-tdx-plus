@@ -1,15 +1,17 @@
 # easy-tdx
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/easy-tdx.svg)](https://pypi.org/project/easy-tdx/)
+[![PyPI](https://img.shields.io/pypi/v/easy-tdx-ng.svg)](https://pypi.org/project/easy-tdx-ng/)
 
 通达信 TCP 行情协议客户端。支持 A 股、港股、美股、期货全市场；内置 `easy-tdx` CLI 工具，默认 JSON 输出，天然适配 Claude Code、OpenClaw、Hermes 等 AI Agent 工具链。提供同步 + asyncio 双接口；提供 strict mypy 配置；每一层编解码都有离线 fixture 测试覆盖。
 
 ## 安装
 
 ```bash
-pip install easy-tdx
+pip install easy-tdx-ng
 ```
+
+> 发行包名 `easy-tdx-ng`（PyPI 上 `easy-tdx` 已被上游占用），导入名仍为 `easy_tdx`，CLI 命令仍为 `easy-tdx`。
 
 安装后自动注册 `easy-tdx` CLI 命令：
 

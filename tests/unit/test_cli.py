@@ -48,9 +48,11 @@ def runner() -> CliRunner:
 
 
 def test_version(runner: CliRunner) -> None:
+    import easy_tdx
+
     res = runner.invoke(cli, ["version"])
     assert res.exit_code == 0
-    assert "1.1.0" in res.output
+    assert easy_tdx.__version__ in res.output
 
 
 def test_root_help(runner: CliRunner) -> None:

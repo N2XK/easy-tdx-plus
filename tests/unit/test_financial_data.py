@@ -1,9 +1,11 @@
 """离线测试：专业财务数据解析。"""
 
+import io
 import struct
 import zipfile
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from easy_tdx.codec.financial import parse_financial_dat, parse_financial_file_list
@@ -153,3 +155,57 @@ class TestReadHistoryFinancialOffline:
     def test_missing_file(self, tmp_path: Path) -> None:
         with pytest.raises(TdxFileNotFoundError):
             read_history_financial(tmp_path / "nope.dat")
+
+
+def _gpcw_zip(path: Path, report_date: int, stocks: list[tuple[str, int, list[float]]]) -> None:
+    dat = TestParseFinancialDat()._build_dat(report_date=report_date, stocks=stocks)
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(f"gpcw{report_date}.dat", dat)
+
+
+def test_read_financial_history_panel(tmp_path: Path) -> None:
+    from easy_tdx.offline import read_financial_history_panel
+
+    _gpcw_zip(tmp_path / "gpcw20240331.zip", 20240331, [("000001", 0, [1.0, 2.0])])
+    _gpcw_zip(tmp_path / "gpcw20240630.zip", 20240630, [("000001", 0, [3.0, 4.0])])
+    panel = read_financial_history_panel(tmp_path)
+    assert panel["report_date"].tolist() == [20240331, 20240630]
+    assert panel.iloc[0]["f0"] == 1.0 and panel.iloc[1]["f0"] == 3.0
+    assert read_financial_history_panel(tmp_path, codes=["600000"]).empty
+
+
+def test_download_financial_history(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from easy_tdx import TdxClient
+
+    c = TdxClient(host="127.0.0.1")
+    listing = pd.DataFrame(
+        {
+            "filename": [
+                "tdxfin/gpcw20231231.zip",
+                "tdxfin/gpcw20240331.zip",
+                "tdxfin/gpcw20240630.zip",
+            ]
+        }
+    )
+    monkeypatch.setattr(c, "get_financial_file_list", lambda host=None: listing)
+    calls: list[str] = []
+
+    def fake_file(filename: str, host: str | None = None) -> bytes:
+        calls.append(filename)
+        buf = io.BytesIO()
+        report = int(filename[-12:-4])
+        dat = TestParseFinancialDat()._build_dat(report_date=report, stocks=[("000001", 0, [1.0])])
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("gpcw.dat", dat)
+        return buf.getvalue()
+
+    monkeypatch.setattr(c, "get_financial_file", fake_file)
+
+    paths = c.download_financial_history(tmp_path, 20240101, 20241231)
+    assert [p.name for p in paths] == ["gpcw20240331.zip", "gpcw20240630.zip"]
+    assert calls == ["tdxfin/gpcw20240331.zip", "tdxfin/gpcw20240630.zip"]
+
+    # 第二次应命中本地，不再下载
+    calls.clear()
+    c.download_financial_history(tmp_path, 20240101, 20241231)
+    assert calls == []

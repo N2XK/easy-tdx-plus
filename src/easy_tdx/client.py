@@ -1466,6 +1466,65 @@ class TdxClient:
             )
         return _to_df(records)
 
+    def download_financial_history(
+        self,
+        data_dir: str | Path,
+        start_date: int = 19900101,
+        end_date: int | None = None,
+        *,
+        overwrite: bool = False,
+        host: str | None = None,
+    ) -> list[Path]:
+        """批量下载季度历史财务（gpcw*.zip）到本地，支持断点续传。
+
+        基于计算服务器的财报文件列表（tdxfin/gpcw.txt），按报告期区间过滤后逐季下载，
+        已存在且完整的文件默认跳过；写入采用「临时文件 + 原子替换」，避免半包。
+
+        Args:
+            data_dir: 本地保存目录（不存在则创建）。
+            start_date / end_date: 报告期区间（YYYYMMDD，闭区间）。
+            overwrite: 为 True 时重新下载已存在文件。
+            host: 计算服务器（默认 ``get_calc_hosts()[0]``）。
+
+        Returns:
+            下载或已存在的本地文件路径列表（按报告期升序）。
+        """
+        import re
+
+        if end_date is None:
+            end_date = _today_in_shanghai()
+        out_dir = Path(data_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        listing = self.get_financial_file_list(host)
+        if listing.empty:
+            return []
+
+        entries: list[tuple[int, str]] = []
+        for filename in listing["filename"]:
+            m = re.search(r"(\d{8})", str(filename))
+            if not m:
+                continue
+            date = int(m.group(1))
+            if start_date <= date <= end_date:
+                entries.append((date, str(filename)))
+        entries.sort()
+
+        written: list[Path] = []
+        for _date, filename in entries:
+            target = out_dir / Path(filename).name
+            if target.is_file() and target.stat().st_size > 0 and not overwrite:
+                written.append(target)
+                continue
+            fetch_name = filename if "/" in filename else f"tdxfin/{filename}"
+            data = self.get_financial_file(fetch_name, host)
+            if not data or not data.startswith(b"PK"):
+                continue
+            tmp = target.with_suffix(target.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(target)
+            written.append(target)
+        return written
+
     def get_market_stat(self) -> pd.DataFrame:
         """获取 A 股全市场涨跌统计概况（基于 880005 行情统计）。
 

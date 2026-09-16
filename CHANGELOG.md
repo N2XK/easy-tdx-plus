@@ -34,6 +34,8 @@
   `get_code_name_table`、`get_bj_code_map`（北交所新旧代码）、`get_hk_stock_concepts`/`get_us_stock_concepts`、
   `get_zhb_config`（通用 INI）、`get_stock_name_history`（**股票曾用名** profile.dat）、`get_bj_more`。
 - **历史财务**：`read_history_financial_df` 快路径；point-in-time 面板（`report_date`）。
+- **批量历史财务**：`download_financial_history(dir, start, end)`（季度 gpcw 断点续传 + 原子写）；
+  `read_financial_history_panel(dir, codes)` 拼多季度 point-in-time 面板（每记录 ~584 字段）。
 - **派生计算**：仿射复权因子与前后复权日线；基础日线（换手/市值等）；技术指标（MA/EMA/MACD/KDJ/BOLL/RSI/量比）。
 - **公式解释器**（`easy_tdx.derive.formula`）：50+ 内置函数（REF/MA/EMA/SMA/SUM/HHV/LLV/STD/COUNT/CROSS/RSI/BARSLAST/
   BACKSET/SUMBARS/FILTER/HHVBARS/SLOPE/VAR/DMA/ZIG/PEAK/TROUGH/TR/ATR/OBV/PDI/MDI/ADX/ADXR/SAR 等）、

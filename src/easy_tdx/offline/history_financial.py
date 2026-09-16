@@ -73,6 +73,37 @@ def read_history_financial_df(filepath: str | Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def read_financial_history_panel(
+    source: str | Path | list[str | Path],
+    codes: list[str] | None = None,
+) -> pd.DataFrame:
+    """把多季度 gpcw 文件拼成 point-in-time 财务面板。
+
+    Args:
+        source: 目录（会读取其中全部 ``gpcw*.zip`` / ``gpcw*.dat``）或文件路径列表。
+        codes: 仅保留这些代码。
+
+    Returns:
+        含 ``code / market / report_date / f0..fN`` 的面板，按 (code, report_date) 升序。
+    """
+    if isinstance(source, (str, Path)) and Path(source).is_dir():
+        base = Path(source)
+        paths = sorted(base.glob("gpcw*.zip")) + sorted(base.glob("gpcw*.dat"))
+    elif isinstance(source, (str, Path)):
+        paths = [Path(source)]
+    else:
+        paths = [Path(p) for p in source]
+
+    frames = [read_history_financial_df(p) for p in paths]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame(columns=["code", "market", "report_date"])
+    panel = pd.concat(frames, ignore_index=True)
+    if codes:
+        panel = panel[panel["code"].isin(set(codes))]
+    return panel.sort_values(["code", "report_date"]).reset_index(drop=True)
+
+
 def _read_from_zip(zip_path: Path) -> bytes:
     """从 zip 中提取 .dat 文件内容。"""
     try:

@@ -5,7 +5,11 @@ from .daily_bar import find_daily_bar_file, read_daily_bars, read_daily_bars_df
 from .ex_daily_bar import ExDailyBar, read_ex_daily_bars, read_ex_daily_bars_df
 from .finders import find_5min_bar_file, find_lc1_bar_file, find_lc5_bar_file
 from .gbbq import GbbqRecord, read_gbbq
-from .history_financial import read_history_financial, read_history_financial_df
+from .history_financial import (
+    read_financial_history_panel,
+    read_history_financial,
+    read_history_financial_df,
+)
 from .htc import HtcEntry, HtcHeader, iter_htc, read_htc
 from .min_bar import read_5min_bars, read_5min_bars_df, read_lc_min_bars, read_lc_min_bars_df
 from .official import (
@@ -49,6 +53,7 @@ __all__ = [
     # 历史财务
     "read_history_financial",
     "read_history_financial_df",
+    "read_financial_history_panel",
     # 官方下载（tdx.com.cn）
     "OfficialChannel",
     "parse_downit_cfg",

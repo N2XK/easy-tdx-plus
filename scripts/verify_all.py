@@ -115,6 +115,7 @@ def run_standard() -> None:
             lambda: c.get_minute_aux(Market.SH, "600519", "volume_comparison"),
         )
         check(g, "get_sparkline", lambda: c.get_sparkline(Market.SH, "600519"))
+        check(g, "get_auction_series", lambda: c.get_auction_series(Market.SZ, "000001"))
         check(g, "get_transaction_data", lambda: c.get_transaction_data(Market.SH, "600519", 0, 50))
         check(
             g,

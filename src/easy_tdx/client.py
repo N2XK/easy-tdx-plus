@@ -55,6 +55,7 @@ from .codec.configdata import (
 from .codec.financial import parse_financial_dat, parse_financial_file_list
 from .codec.industry import parse_tdxhy_cfg
 from .codec.price_rules import compute_price_limits, get_no_limit_window_days
+from .commands.auction_series import GetAuctionSeriesCmd
 from .commands.base import BaseCommand
 from .commands.block_info import GetBlockInfoCmd, GetBlockInfoMetaCmd
 from .commands.company_info import GetCompanyInfoCategoryCmd, GetCompanyInfoContentCmd
@@ -1045,6 +1046,27 @@ class TdxClient:
             for p in points
         ]
         return _add_minute_aux_time(pd.DataFrame(rows))
+
+    def get_auction_series(
+        self,
+        market: Market,
+        code: str,
+        date: int | None = None,
+        count: int = 500,
+    ) -> pd.DataFrame:
+        """获取集合竞价过程快照（0x056a，秒级）。
+
+        Args:
+            date: 交易日 YYYYMMDD；``None`` 表示当日。
+            count: 最多返回的快照条数。
+
+        MAC 协议的 ``get_auction`` 只提供当日聚合快照；本接口在标准协议下
+        可用 ``date`` 取历史交易日的竞价过程。
+        """
+        points = self._execute_std(
+            GetAuctionSeriesCmd(market, code, date, count=count), require_nonempty=True
+        )
+        return _to_df(points)
 
     def get_sparkline(
         self, market: Market, code: str, selector: int = 1, window: int = 20
@@ -2354,6 +2376,19 @@ class AsyncTdxClient:
             for p in points
         ]
         return _add_minute_aux_time(pd.DataFrame(rows))
+
+    async def get_auction_series(
+        self,
+        market: Market,
+        code: str,
+        date: int | None = None,
+        count: int = 500,
+    ) -> pd.DataFrame:
+        """获取集合竞价过程快照（0x056a，秒级；异步版）。"""
+        points = await self._execute_std(
+            GetAuctionSeriesCmd(market, code, date, count=count), require_nonempty=True
+        )
+        return _to_df(points)
 
     async def get_sparkline(
         self, market: Market, code: str, selector: int = 1, window: int = 20

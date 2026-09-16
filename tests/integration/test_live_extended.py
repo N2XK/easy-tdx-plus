@@ -87,3 +87,16 @@ def test_live_qfq_parity_multiple_stocks() -> None:
             ]
             mean_rel = sum(rel) / len(rel)
             assert mean_rel < 1e-4, f"{code} 复权偏差过大: mean_rel={mean_rel:.2e}"
+
+
+def test_live_auction_series() -> None:
+    """0x056a：集合竞价过程快照（当日 + 历史）。"""
+    with TdxClient.from_best_host(timeout=5.0) as c:
+        today = c.get_auction_series(Market.SZ, "000001")
+        assert len(today) > 0
+        assert set(today.columns) >= {"time", "price", "matched", "unmatched"}
+        assert today["price"].iloc[0] > 0
+
+        hist = c.get_auction_series(Market.SZ, "000001", date=20260814)
+        assert len(hist) > 0
+        assert hist["time"].iloc[0].hour == 9

@@ -9,7 +9,8 @@
 
 ### Added
 
-- **标准协议**：K 线便利方法 `get_bars` / `get_bars_range` / `get_k_data`；`get_history_transaction_all`（历史逐笔全量分页）；
+- **标准协议**：`get_auction_series`（集合竞价过程快照 0x056a，秒级，支持按日期取历史）；
+  K 线便利方法 `get_bars` / `get_bars_range` / `get_k_data`；`get_history_transaction_all`（历史逐笔全量分页）；
   `get_security_features_all`；`get_trading_calendar` / `get_trading_days`；`get_formula`。
 - **交易日历**（`easy_tdx.TradingCalendar`）：由指数日线构建，提供 `is_trading_day` / `prev_` / `next_trading_day` /
   `trading_days_between` / `count` / `recent` / `as_ints`。

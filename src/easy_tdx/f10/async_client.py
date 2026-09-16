@@ -26,6 +26,8 @@ class AsyncF10Client:
         transport: TqlexTransport | None = None,
         cache: bool = False,
         cache_ttl: float = 60.0,
+        empty_retries: int = 2,
+        empty_retry_delay: float = 0.5,
     ) -> None:
         self._sync = F10Client(
             base_url=base_url,
@@ -34,6 +36,8 @@ class AsyncF10Client:
             transport=transport,
             cache=cache,
             cache_ttl=cache_ttl,
+            empty_retries=empty_retries,
+            empty_retry_delay=empty_retry_delay,
         )
 
     @property

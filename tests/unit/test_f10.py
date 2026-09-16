@@ -30,6 +30,21 @@ class _FakeTransport:
         return self.response
 
 
+class _SeqTransport:
+    """按顺序回放多个响应的假传输层（用于空结果重试测试）。"""
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.base_url = "http://fake/TQLEX"
+        self.timeout = 1.0
+        self.retries = 0
+        self._responses = list(responses)
+        self.count = 0
+
+    def post(self, entry: str, body: Any) -> dict[str, Any]:
+        self.count += 1
+        return self._responses.pop(0) if self._responses else {"ErrorCode": 0}
+
+
 def test_split_code() -> None:
     assert split_code("600519") == (1, "sh", "600519")
     assert split_code("sh600519") == (1, "sh", "600519")
@@ -72,7 +87,7 @@ def test_shareholder_sections_params() -> None:
     from easy_tdx.f10.entries import ENTRY_SHAREHOLDER_CHANGE
 
     fake = _FakeTransport({"ErrorCode": 0})
-    c = F10Client(transport=fake, cache=False)
+    c = F10Client(transport=fake, cache=False, empty_retries=0)
 
     c.shareholder_report_dates("600519")
     assert fake.calls[-1] == (
@@ -93,10 +108,36 @@ def test_shareholder_sections_params() -> None:
     assert fake.calls[-1][1]["Params"] == ["600519", "ltgd", "", "", "1", "1", "40"]
 
 
+_GOOD = {"ErrorCode": 0, "ResultSets": [{"ColName": ["A"], "Content": [[1]]}]}
+_EMPTY = {"ErrorCode": 0}
+
+
+def test_empty_retry_recovers() -> None:
+    t = _SeqTransport([_EMPTY, _EMPTY, _GOOD])
+    c = F10Client(transport=t, cache=False, empty_retries=3, empty_retry_delay=0.0)
+    resp = c.call("X", params=[])
+    assert resp.rows and t.count == 3
+
+
+def test_empty_retry_disabled() -> None:
+    t = _SeqTransport([_EMPTY, _GOOD])
+    c = F10Client(transport=t, cache=False, empty_retries=0)
+    resp = c.call("X", params=[])
+    assert not resp.rows and t.count == 1
+
+
+def test_empty_not_cached() -> None:
+    t = _SeqTransport([_EMPTY] * 6)
+    c = F10Client(transport=t, cache=True, empty_retries=1, empty_retry_delay=0.0)
+    c.call("X", params=[])
+    c.call("X", params=[])
+    assert t.count == 4  # 每次 1 次原始 + 1 次重试；空响应不缓存
+
+
 def test_f10client_company_profile_calls_entry() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     resp = client.company_profile("600519")
     assert fake.calls == [("CWServ.tdxf10_gg_gsgk", {"Params": ["8", "600519", ""]})]
     assert resp.ok and resp.first_row()["T035"] == "A股"
@@ -104,7 +145,7 @@ def test_f10client_company_profile_calls_entry() -> None:
 
 def test_f10client_valuation_body_shape() -> None:
     fake = _FakeTransport({"ErrorCode": 0, "ResultSets": []})
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     client.valuation("600519")
     entry, body = fake.calls[0]
     assert entry == "HQServ.hq_nlp_gpsj"
@@ -115,7 +156,7 @@ def test_f10client_valuation_body_shape() -> None:
 
 def test_f10client_announcements_cache_key() -> None:
     fake = _FakeTransport({"ErrorCode": 0, "ResultSets": []})
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     client.announcements("sh600519")
     entry, body = fake.calls[0]
     assert entry == "CWSearch.tzx_rcache"
@@ -125,7 +166,7 @@ def test_f10client_announcements_cache_key() -> None:
 
 def test_limit_up_down_list_date_normalization() -> None:
     fake = _FakeTransport({"ErrorCode": 0, "ResultSets": []})
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     client.limit_up_down_list("2026-09-01", 20260915)
     entry, body = fake.calls[0]
     assert entry == "CWServ.cfg_fx_lbtt"
@@ -147,7 +188,7 @@ def test_cache_avoids_duplicate_requests() -> None:
 def test_no_cache_by_default() -> None:
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     client.company_profile("600519")
     client.company_profile("600519")
     assert len(fake.calls) == 2
@@ -178,7 +219,7 @@ class _PagedTransport:
 
 def test_company_news_all_paginates() -> None:
     fake = _PagedTransport(total=45, page_size=20)
-    client = F10Client(transport=fake)
+    client = F10Client(transport=fake, empty_retries=0)
     rows = client.company_news_all("600519", page_size=20)
     assert len(rows) == 45
     assert fake.calls == 3  # 20 + 20 + 5
@@ -191,7 +232,7 @@ def test_async_f10_client() -> None:
 
     raw = _load("f10_company_profile.json")
     fake = _FakeTransport(raw)
-    client = AsyncF10Client(transport=fake)
+    client = AsyncF10Client(transport=fake, empty_retries=0)
 
     async def main() -> dict[str, Any]:
         resp = await client.company_profile("600519")

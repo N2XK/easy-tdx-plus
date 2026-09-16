@@ -91,6 +91,8 @@ class F10Client:
         transport: TqlexTransport | None = None,
         cache: bool = False,
         cache_ttl: float = 60.0,
+        empty_retries: int = 2,
+        empty_retry_delay: float = 0.5,
     ) -> None:
         self.base_url = base_url
         self.limit_board_base_url = (
@@ -101,6 +103,8 @@ class F10Client:
         self._cache_enabled = cache
         self._cache_ttl = cache_ttl
         self._cache: dict[str, tuple[float, Any]] = {}
+        self._empty_retries = max(0, empty_retries)
+        self._empty_retry_delay = empty_retry_delay
 
     def clear_cache(self) -> None:
         """清空结果缓存。"""
@@ -117,7 +121,11 @@ class F10Client:
     def call(
         self, entry: str, body: Any | None = None, *, params: list[Any] | None = None
     ) -> F10Response:
-        """调用任意 TQLEX Entry。"""
+        """调用任意 TQLEX Entry。
+
+        网关偶发返回空（无结果表），此处对空结果做有限重试；仅缓存非空结果，
+        避免把空响应固化进缓存。
+        """
         if body is not None and params is not None:
             raise ValueError("body 与 params 只能传一个")
         request_body = {"Params": list(params)} if params is not None else (body or {})
@@ -127,10 +135,18 @@ class F10Client:
             hit = self._cache.get(key)
             if hit is not None and (time.monotonic() - hit[0]) < self._cache_ttl:
                 return parse_tqlex_response(entry, request_body, hit[1])
-        raw = self._transport_for(base).post(entry, request_body)
-        if self._cache_enabled:
+        transport = self._transport_for(base)
+        raw = transport.post(entry, request_body)
+        response = parse_tqlex_response(entry, request_body, raw)
+        attempt = 0
+        while not response.result_sets and attempt < self._empty_retries:
+            attempt += 1
+            time.sleep(self._empty_retry_delay * attempt)
+            raw = transport.post(entry, request_body)
+            response = parse_tqlex_response(entry, request_body, raw)
+        if self._cache_enabled and response.result_sets:
             self._cache[key] = (time.monotonic(), raw)
-        return parse_tqlex_response(entry, request_body, raw)
+        return response
 
     def _transport_for(self, base: str) -> TqlexTransport:
         if self._injected or base == self._transport.base_url:

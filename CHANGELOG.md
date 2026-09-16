@@ -43,6 +43,7 @@
 
 ### Fixed
 
+- F10/TQLEX 网关偶发返回空：`F10Client` 对空结果做有限重试（`empty_retries`），且空响应不入缓存。
 - `ping_all` 单台主机失败不再中断整体优选。
 - 修复 `get_security_list`(0x044d) 与 `get_sparkline`(0x0fd1) 同连接重复调用超时。
 - 修复分时副图长度、多日分时解析、扩展登录残留帧等问题。

@@ -367,6 +367,32 @@ class F10Client:
             ENTRY_SHAREHOLDER_CHANGE, _code6(code), "ltgd", "", "", "1", "1", str(page_size)
         )
 
+    def shareholder_count(
+        self, code: str, report_date: str = "", page_size: int = 50
+    ) -> F10Response:
+        """股东人数（``gdrs``）。
+
+        字段：``T002`` 截止日期 / ``T003`` 股东人数(户) / ``T004`` 人均流通股(股) /
+        ``T005`` 股东人数较上期变化(%) / ``T006`` 人均流通股数较上期变化(%) /
+        ``T007`` 股价(元) / ``T012`` 股东户数较上期变化。
+        """
+        return self.params(
+            ENTRY_SHAREHOLDER_CHANGE,
+            _code6(code),
+            "gdrs",
+            report_date,
+            "",
+            "1",
+            "1",
+            str(page_size),
+        )
+
+    def shareholder_count_rank(self, code: str, report_date: str = "") -> F10Response:
+        """股东人数增减量排名（``thygdrs``）。字段：zqdm/zqjc/sc/T003/T005。"""
+        return self.params(
+            ENTRY_SHAREHOLDER_CHANGE, _code6(code), "thygdrs", report_date, "", "1", "1", "20"
+        )
+
     def governance(self, code: str, section: str = "wgcl", arg: str = "") -> F10Response:
         """资本运作治理（wgcl 违规处理 / dbmx 担保明细）。"""
         return self.params(ENTRY_GOVERNANCE, section, _code6(code), arg)

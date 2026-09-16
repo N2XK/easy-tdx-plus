@@ -107,6 +107,12 @@ def test_shareholder_sections_params() -> None:
     c.shareholder_trend("600519", page_size=40)
     assert fake.calls[-1][1]["Params"] == ["600519", "ltgd", "", "", "1", "1", "40"]
 
+    c.shareholder_count("000001", "20241231")
+    assert fake.calls[-1][1]["Params"] == ["000001", "gdrs", "20241231", "", "1", "1", "50"]
+
+    c.shareholder_count_rank("000001")
+    assert fake.calls[-1][1]["Params"] == ["000001", "thygdrs", "", "", "1", "1", "20"]
+
 
 _GOOD = {"ErrorCode": 0, "ResultSets": [{"ColName": ["A"], "Content": [[1]]}]}
 _EMPTY = {"ErrorCode": 0}

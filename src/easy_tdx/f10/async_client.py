@@ -159,6 +159,14 @@ class AsyncF10Client:
     async def shareholder_trend(self, code: str, page_size: int = 80) -> F10Response:
         return await asyncio.to_thread(self._sync.shareholder_trend, code, page_size)
 
+    async def shareholder_count(
+        self, code: str, report_date: str = "", page_size: int = 50
+    ) -> F10Response:
+        return await asyncio.to_thread(self._sync.shareholder_count, code, report_date, page_size)
+
+    async def shareholder_count_rank(self, code: str, report_date: str = "") -> F10Response:
+        return await asyncio.to_thread(self._sync.shareholder_count_rank, code, report_date)
+
     async def detail(self, detail_type: str, record_id: str | int) -> F10Response:
         return await asyncio.to_thread(self._sync.detail, detail_type, record_id)
 

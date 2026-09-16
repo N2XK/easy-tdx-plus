@@ -43,6 +43,8 @@ def _calls() -> list[tuple[str, str, Callable[[F10Client, str], object]]]:
         ("shareholder_report_dates", "股东报告期", lambda c, k: c.shareholder_report_dates(k)),
         ("top_shareholders", "十大股东", lambda c, k: c.top_shareholders(k, "20240930")),
         ("institutional_holding", "机构持股", lambda c, k: c.institutional_holding(k)),
+        ("shareholder_count", "股东人数", lambda c, k: c.shareholder_count(k)),
+        ("shareholder_count_rank", "股东人数排名", lambda c, k: c.shareholder_count_rank(k)),
         ("shareholder_trend", "流通股东趋势", lambda c, k: c.shareholder_trend(k)),
         ("annotation_governance", "治理", lambda c, k: c.governance(k)),
         ("ranking_detail", "排名", lambda c, k: c.ranking_detail(k)),

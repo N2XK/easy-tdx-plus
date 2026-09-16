@@ -1423,11 +1423,18 @@ class TdxClient:
     def get_adjust_factors(
         self, market: Market, code: str, start_date: int = 19900101, end_date: int | None = None
     ) -> pd.DataFrame:
-        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件）。"""
+        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件）。
+
+        因子基于全量历史计算后裁剪窗口，避免 hfq 因子随 start_date 漂移。
+        """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
-        return compute_adjust_factors(bars, events)
+        bars, events = self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        factors = compute_adjust_factors(bars, events)
+        if start_date > 19900101 and "date" in factors.columns:
+            keep = pd.to_datetime(factors["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date
+            factors = factors[keep].reset_index(drop=True)
+        return factors
 
     def get_fq_bars(
         self,
@@ -1439,12 +1446,20 @@ class TdxClient:
     ) -> pd.DataFrame:
         """获取前复权（qfq）/ 后复权（hfq）日线（本地按 gbbq 计算）。
 
-        替代：MAC 协议 ``get_stock_kline(adjust=...)`` 由服务端计算，两者口径略有差异。
+        复权因子**始终基于全量历史**计算，再裁剪到 ``[start_date, end_date]``：
+        这样同一交易日的后复权价不会因请求窗口不同而漂移（hfq 以最早交易日为基准）。
+
+        替代：MAC 协议 ``get_stock_kline(adjust=...)`` 由服务端计算；qfq 与服务端
+        一致（浮点内），hfq 因基准约定不同会相差一个常数因子（相对走势一致）。
         """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
-        return adjust_bars(bars, events, mode=mode)
+        bars, events = self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        out = adjust_bars(bars, events, mode=mode)
+        if start_date > 19900101 and "date" in out.columns:
+            keep = pd.to_datetime(out["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date
+            out = out[keep].reset_index(drop=True)
+        return out
 
     def get_basic_daily(
         self,
@@ -2239,11 +2254,18 @@ class AsyncTdxClient:
     async def get_adjust_factors(
         self, market: Market, code: str, start_date: int = 19900101, end_date: int | None = None
     ) -> pd.DataFrame:
-        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件）。"""
+        """计算与日线对齐的前/后复权因子（基于 gbbq 除权除息事件；异步版）。
+
+        因子基于全量历史计算后裁剪窗口，避免 hfq 因子随 start_date 漂移。
+        """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
-        return compute_adjust_factors(bars, events)
+        bars, events = await self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        factors = compute_adjust_factors(bars, events)
+        if start_date > 19900101 and "date" in factors.columns:
+            keep = pd.to_datetime(factors["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date
+            factors = factors[keep].reset_index(drop=True)
+        return factors
 
     async def get_fq_bars(
         self,
@@ -2253,11 +2275,18 @@ class AsyncTdxClient:
         start_date: int = 19900101,
         end_date: int | None = None,
     ) -> pd.DataFrame:
-        """获取前复权（qfq）/ 后复权（hfq）日线（本地按 gbbq 计算）。"""
+        """获取前复权（qfq）/ 后复权（hfq）日线（本地按 gbbq 计算；异步版）。
+
+        因子基于全量历史计算后裁剪窗口，保证 hfq 不随请求窗口漂移（同同步版）。
+        """
         if end_date is None:
             end_date = _today_in_shanghai()
-        bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
-        return adjust_bars(bars, events, mode=mode)
+        bars, events = await self._daily_bars_with_xdxr(market, code, 19900101, end_date)
+        out = adjust_bars(bars, events, mode=mode)
+        if start_date > 19900101 and "date" in out.columns:
+            keep = pd.to_datetime(out["date"]).dt.strftime("%Y%m%d").astype(int) >= start_date
+            out = out[keep].reset_index(drop=True)
+        return out
 
     async def get_basic_daily(
         self,

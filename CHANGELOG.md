@@ -64,6 +64,11 @@
 
 ### Fixed
 
+- **本地 .day 证券类型/系数**（`offline/daily_bar.py`，对齐 mootdx）：`SZ_BOND` 量系数 1.0→0.01（此前成交量放大 100 倍）；
+  补全类型判定：深市基金 `18`、沪市科创板 `68`、沪市基金 `58`、沪市债券 `02/15-20`。
+- **扩展市场 .day 的 amount 字段**（`offline/ex_daily_bar.py`）：此前 `amount` 被错误赋成成交量；现取成交额字段（列表与 DataFrame 均修）。
+- **后复权 (hfq) 随请求窗口漂移**：`get_fq_bars` / `get_adjust_factors` 的因子改为**基于全量历史**计算后再裁剪窗口，
+  同一交易日的 hfq 价不再因 `start_date` 不同而变（此前同一日可相差数百倍）。
 - **财报文件名静默失败**：`get_financial_file`/`get_financial_records` 传裸文件名（如 `gpcw20260331.zip`）时
   服务器返回 0 字节且不报错；现自动补 `tdxfin/` 前缀（与 `download_financial_history` 一致）。
 - **公式解释器统计口径**：`STD`/`VAR` 原用总体口径(ddof=0)，与通达信不符；现 `STD`/`VAR` 为估算(样本, ddof=1)，

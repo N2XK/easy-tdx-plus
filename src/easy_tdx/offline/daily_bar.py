@@ -28,10 +28,11 @@ _DAILY_DTYPE = np.dtype(
     ]
 )
 
-# 证券类型 → (价格系数, 量系数)
+# 证券类型 → (价格系数, 量系数)（与 mootdx/通达信本地口径一致）
 _SECURITY_COEFFICIENTS: dict[str, tuple[float, float]] = {
     "SH_A_STOCK": (0.01, 0.01),
     "SH_B_STOCK": (0.001, 0.01),
+    "SH_STAR_STOCK": (0.01, 0.01),
     "SH_INDEX": (0.01, 1.0),
     "SH_FUND": (0.001, 1.0),
     "SH_BOND": (0.001, 1.0),
@@ -39,7 +40,7 @@ _SECURITY_COEFFICIENTS: dict[str, tuple[float, float]] = {
     "SZ_B_STOCK": (0.01, 0.01),
     "SZ_INDEX": (0.01, 1.0),
     "SZ_FUND": (0.001, 0.01),
-    "SZ_BOND": (0.001, 1.0),
+    "SZ_BOND": (0.001, 0.01),
 }
 
 
@@ -59,7 +60,7 @@ def _detect_security_type(filename: str) -> str:
             return "SZ_B_STOCK"
         if code_head == "39":
             return "SZ_INDEX"
-        if code_head in ("15", "16"):
+        if code_head in ("15", "16", "18"):
             return "SZ_FUND"
         if code_head in ("10", "11", "12", "13", "14"):
             return "SZ_BOND"
@@ -68,11 +69,27 @@ def _detect_security_type(filename: str) -> str:
             return "SH_A_STOCK"
         if code_head == "90":
             return "SH_B_STOCK"
+        if code_head == "68":
+            return "SH_STAR_STOCK"
         if code_head in ("00", "88", "99"):
             return "SH_INDEX"
-        if code_head in ("50", "51"):
+        if code_head in ("50", "51", "58"):
             return "SH_FUND"
-        if code_head in ("01", "10", "11", "12", "13", "14"):
+        if code_head in (
+            "01",
+            "02",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+        ):
             return "SH_BOND"
 
     return "SZ_A_STOCK"  # 默认按 A 股处理

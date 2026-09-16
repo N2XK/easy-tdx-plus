@@ -76,7 +76,7 @@ def read_ex_daily_bars(filepath: str | Path) -> list[ExDailyBar]:
             high=float(arr["high"][i]),
             low=float(arr["low"][i]),
             close=float(arr["close"][i]),
-            amount=int(arr["vol"][i]),
+            amount=int(arr["amt_u"][i]),
             vol=int(arr["vol"][i]),
             settlement=float(arr["settlement"][i]),
             hk_stock_amount=float(hk[i]),
@@ -107,7 +107,7 @@ def read_ex_daily_bars_df(filepath: str | Path) -> pd.DataFrame:
             "high": arr["high"].astype(float),
             "low": arr["low"].astype(float),
             "vol": arr["vol"].astype(float),
-            "amount": arr["vol"].astype(float),
+            "amount": arr["amt_u"].astype(float),
             "settlement": arr["settlement"].astype(float),
             "hk_stock_amount": arr["amt_u"].copy().view("<f4").astype(float),
         }

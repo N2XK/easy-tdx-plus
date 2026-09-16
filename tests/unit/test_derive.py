@@ -108,3 +108,48 @@ def test_non_category1_ignored() -> None:
     ev = [_Ev(category=5, year=2026, month=1, day=2, songzhuangu=1.0)]
     f = compute_adjust_factors(bars, ev)
     assert f["hfq_mul"].tolist() == [1.0, 1.0]
+
+
+def test_get_fq_bars_hfq_window_invariant(monkeypatch) -> None:
+    """hfq 因子必须基于全量历史计算：请求窗口改变不应改变同一日的后复权价。"""
+    import pandas as pd
+
+    from easy_tdx import Market, TdxClient
+
+    dates = pd.date_range("2020-01-01", periods=6, freq="D")
+    bars = pd.DataFrame(
+        {
+            "date": dates,
+            "open": [10.0, 10.0, 5.0, 5.0, 5.0, 5.0],
+            "high": [10.0, 10.0, 5.0, 5.0, 5.0, 5.0],
+            "low": [10.0, 10.0, 5.0, 5.0, 5.0, 5.0],
+            "close": [10.0, 10.0, 5.0, 5.0, 5.0, 5.0],
+            "vol": [1.0] * 6,
+        }
+    )
+
+    class _Ev:
+        category = 1
+        year, month, day = 2020, 1, 3
+        fenhong, songzhuangu, peigu, peigujia = 0.0, 1.0, 0.0, 0.0
+
+    calls: list[int] = []
+
+    def fake_bars_with_xdxr(self, market, code, start_date, end_date):  # noqa: ANN001
+        calls.append(start_date)
+        return bars, [_Ev()]
+
+    monkeypatch.setattr(TdxClient, "_daily_bars_with_xdxr", fake_bars_with_xdxr)
+    c = TdxClient(host="127.0.0.1")
+
+    full = c.get_fq_bars(Market.SZ, "000001", mode="hfq", start_date=19900101)
+    part = c.get_fq_bars(Market.SZ, "000001", mode="hfq", start_date=20200104)
+    # 因子始终取全量起点
+    assert set(calls) == {19900101}
+    # 输出按请求窗口裁剪，且重叠日期数值一致
+    assert len(part) < len(full)
+    d0 = pd.to_datetime(part["date"].iloc[0]).date()
+    assert d0 >= pd.Timestamp("2020-01-04").date()
+    merged = full.merge(part, on="date", suffixes=("_f", "_p"))
+    assert len(merged) == len(part)
+    assert (merged["close_f"] == merged["close_p"]).all()

@@ -94,11 +94,14 @@ def test_ex_daily_vectorized(tmp_path: Path) -> None:
     assert len(bars) == 1
     assert bars[0].open == pytest.approx(10.5)
     assert bars[0].vol == 500
+    assert bars[0].amount == amt_u  # amount 取成交额字段，不能等于 vol
     assert bars[0].hk_stock_amount == pytest.approx(1.25)
 
     df = read_ex_daily_bars_df(path)
     assert df["settlement"].iloc[0] == pytest.approx(10.52)
     assert df["hk_stock_amount"].iloc[0] == pytest.approx(1.25)
+    assert df["amount"].iloc[0] == float(amt_u)
+    assert df["vol"].iloc[0] == 500.0
 
 
 def test_truncated_file_ignored(tmp_path: Path) -> None:
@@ -115,3 +118,33 @@ def test_empty_file(tmp_path: Path) -> None:
     path.write_bytes(b"")
     assert read_daily_bars(path) == []
     assert read_daily_bars_df(path).empty
+
+
+def test_security_coefficients_match_mootdx() -> None:
+    """与 mootdx/通达信本地口径对齐（重点：SZ_BOND 量系数）。"""
+    from easy_tdx.offline.daily_bar import _SECURITY_COEFFICIENTS, _detect_security_type
+
+    assert _SECURITY_COEFFICIENTS["SZ_BOND"] == (0.001, 0.01)
+    assert _SECURITY_COEFFICIENTS["SH_FUND"] == (0.001, 1.0)
+    assert _SECURITY_COEFFICIENTS["SZ_FUND"] == (0.001, 0.01)
+    assert _SECURITY_COEFFICIENTS["SH_STAR_STOCK"] == (0.01, 0.01)
+
+    cases = {
+        "sz000001.day": "SZ_A_STOCK",
+        "sz300750.day": "SZ_A_STOCK",
+        "sz200011.day": "SZ_B_STOCK",
+        "sz399001.day": "SZ_INDEX",
+        "sz184801.day": "SZ_FUND",
+        "sz180101.day": "SZ_FUND",
+        "sz123456.day": "SZ_BOND",
+        "sh600519.day": "SH_A_STOCK",
+        "sh688981.day": "SH_STAR_STOCK",
+        "sh900901.day": "SH_B_STOCK",
+        "sh000001.day": "SH_INDEX",
+        "sh510300.day": "SH_FUND",
+        "sh588000.day": "SH_FUND",
+        "sh010107.day": "SH_BOND",
+        "sh020000.day": "SH_BOND",
+    }
+    for fname, expect in cases.items():
+        assert _detect_security_type(fname) == expect, fname

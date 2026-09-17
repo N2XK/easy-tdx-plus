@@ -1121,7 +1121,10 @@ class TdxClient:
         points = self._execute_std(
             GetAuctionSeriesCmd(market, code, date, count=count), require_nonempty=True
         )
-        return _to_df(points)
+        df = _to_df(points)
+        if df.empty:
+            return pd.DataFrame(columns=["time", "price", "matched", "unmatched"])
+        return df
 
     def get_sparkline(
         self, market: Market, code: str, selector: int = 1, window: int = 20
@@ -2496,7 +2499,10 @@ class AsyncTdxClient:
         points = await self._execute_std(
             GetAuctionSeriesCmd(market, code, date, count=count), require_nonempty=True
         )
-        return _to_df(points)
+        df = _to_df(points)
+        if df.empty:
+            return pd.DataFrame(columns=["time", "price", "matched", "unmatched"])
+        return df
 
     async def get_sparkline(
         self, market: Market, code: str, selector: int = 1, window: int = 20

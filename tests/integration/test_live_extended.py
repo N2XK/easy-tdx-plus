@@ -53,13 +53,20 @@ def test_live_adjust_factors() -> None:
 
 
 def test_live_stock_profile() -> None:
+    """股票信息汇总：字段齐全、结构与股本一致。
+
+    注：`price`/`turnover_pct` 依赖**当日**行情，盘前或非交易日可能为 0，
+    故此处只断言结构稳定项（不依赖盘中状态）。
+    """
     with TdxClient.from_best_host(timeout=20.0) as c:
         df = c.get_stock_profile([(Market.SH, "600519")])
         assert len(df) == 1
         row = df.iloc[0]
-        assert row["price"] > 0
-        assert row["float_mv"] > 0
-        assert 0 <= row["turnover_pct"] < 100
+        assert row["code"] == "600519"
+        assert row["total_shares"] > 0 and row["float_shares"] > 0
+        # 市值依赖当日价格，盘前可为 0；仅在非 0 时校验大小关系
+        if row["float_mv"] > 0:
+            assert row["total_mv"] >= row["float_mv"]
 
 
 def test_live_f10() -> None:
@@ -92,13 +99,16 @@ def test_live_qfq_parity_multiple_stocks() -> None:
 def test_live_auction_series() -> None:
     """0x056a：集合竞价过程快照（当日 + 历史）。"""
     with TdxClient.from_best_host(timeout=5.0) as c:
+        # 今日竞价：盘前/非交易日为空（正常），非空时校验字段
         today = c.get_auction_series(Market.SZ, "000001")
-        assert len(today) > 0
-        assert set(today.columns) >= {"time", "price", "matched", "unmatched"}
-        assert today["price"].iloc[0] > 0
+        assert set(today.columns) == {"time", "price", "matched", "unmatched"}
+        if len(today):
+            assert today["price"].iloc[0] > 0
 
+        # 历史竞价：固定日期，会话无关
         hist = c.get_auction_series(Market.SZ, "000001", date=20260814)
         assert len(hist) > 0
+        assert hist["price"].iloc[0] > 0
         assert hist["time"].iloc[0].hour == 9
 
 

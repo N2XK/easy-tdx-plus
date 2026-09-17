@@ -14,9 +14,11 @@ _RESPONSE_HEADER_SIZE = 42  # H(2) + 22s(22) + 9*H(18) = 42
 
 
 class ChartSamplingCmd(BaseCommand[list[float]]):
-    """获取分时缩略采样价格点。
+    """获取分时缩略采样价格点（0x254D，**MAC-EX / 7727 专用**）。
 
-    返回 240 个 float 价格值（每分钟一个采样点）。
+    - A 股端口（7709）不响应此命令（A 股请用 0x122D，见 ``MacClient.get_chart_sampling``）；
+    - 采样间隔约 **4 分钟**、点数上限约 **100**（美股完整交易日实测 100 点）；
+    - **无当前交易时段数据时返回空**（如盘前，或 HK/期货当日未开盘）。
 
     Args:
         market: 扩展市场代码（ExMarket 枚举值）。

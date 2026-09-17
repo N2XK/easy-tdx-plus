@@ -158,3 +158,30 @@ def test_live_category_code_flags_match_connect_list() -> None:
     assert len(stocks) > 50
     match = (stocks["code"].isin(connect) == stocks["is_connect"]).all()
     assert match, "flags bit24 与互联互通名单不一致"
+
+
+def test_live_ex_chart_sampling_session_aware() -> None:
+    """0x254D（MAC-EX 专用）：美股必有数据；HK 在交易时段内应有数据。
+
+    采样约每 4 分钟一点、上限 100；无当前时段数据时（盘前/未开盘）返回空，属正常。
+    """
+    from datetime import datetime
+    from datetime import time as dtime
+    from zoneinfo import ZoneInfo
+
+    from easy_tdx import ExMarket
+    from easy_tdx.ex.mac_client import MacExClient
+
+    def hk_in_session() -> bool:
+        now = datetime.now(ZoneInfo("Asia/Hong_Kong"))
+        return now.weekday() < 5 and dtime(9, 30) <= now.time() <= dtime(16, 0)
+
+    with MacExClient.from_best_host(timeout=10.0) as e:
+        us = e.goods_chart_sampling(int(ExMarket.US_STOCK), "A")
+        assert len(us) > 0
+        assert all(p > 0 for p in us["price"])
+
+        hk = e.goods_chart_sampling(int(ExMarket.HK_MAIN_BOARD), "00700")
+        assert "price" in hk.columns
+        if hk_in_session() and len(hk) == 0:
+            pytest.fail("HK 交易时段内 0x254D 返回空（疑似服务器行为变化）")

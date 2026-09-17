@@ -724,8 +724,9 @@ python benchmarks/bench.py                                  # 性能基准（离
 python benchmarks/bench.py --live                           # 追加联网基准
 ```
 
-发布：更新 `pyproject.toml` 版本与 `CHANGELOG.md` 后打标签 `git tag v1.2.0 && git push origin v1.2.0`，
-`.github/workflows/release.yml` 会自动构建、发布到 PyPI（Trusted Publishing）并创建 GitHub Release。
+发布（当前未启用）：更新 `CHANGELOG.md` 后打标签 `git tag v1.2.0 && git push origin v1.2.0`。
+发布流程模板位于 `.github/workflows/release.yml.disabled`（构建 sdist/wheel、发布 PyPI、创建 GitHub Release）；
+如需发布，将其改回 `release.yml` 并在 PyPI 配置 Trusted Publisher 后再推 tag。
 
 ## 致谢
 

@@ -55,6 +55,8 @@
 
 ### Changed
 
+- **发行包名** `easy-tdx-ng` → **`easy-tdx-plus`**（导入名 `easy_tdx`、CLI `easy-tdx` 均不变）。
+
 - **性能优化**：`get_fq_bars(qfq)` 改为按需窗口取数（qfq 与窗口无关，已对照服务端），
   近期窗口 2016ms → **67ms**；hfq 仍取全量历史以保持基准正确。
   MAC-EX `MacExClient.goods_list` 增加市场偏移/商品总数缓存，首次 ~460ms → 复调 **~30ms**。

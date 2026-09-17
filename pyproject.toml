@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "easy-tdx-ng"
+name = "easy-tdx-plus"
 dynamic = ["version"]
 description = "通达信 TCP 协议行情数据客户端，支持在线行情与离线本地数据读取"
 readme = "README.md"

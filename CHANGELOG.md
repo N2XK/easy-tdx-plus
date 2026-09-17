@@ -161,6 +161,12 @@
 
 ### CI / Tests
 
+- **新增实盘录制 fixture 测试**（`tests/unit/test_live_fixtures.py`，21 项）：MAC（server_info/symbol_quotes/
+  symbol_info/belong_board/board_list/board_members/unusual/tick_charts/transaction/symbol_bar/file_query/
+  capital_flow）与 EX（markets/instrument_count/info/quote/quote_list 港股+期货两套布局/bars/history/
+  minute_time/transaction/server_info）逐条锁定字段布局，防"记录布局漂移"类回归。
+  离线单测 398 → **421**，覆盖率 65.6% → **68.5%**（相关命令模块 76–94%）。
+
 - 深度排查补充：本地 `.day`/扩展 `.day`/复权因子/`0x124A`/MAC 文件/扩展逐笔与K线等 9 项修复；
   离线单测 392、全接口实测 183/183、联网集成 13、sync/async 12 组逐位对等。
 

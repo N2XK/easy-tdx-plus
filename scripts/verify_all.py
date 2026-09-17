@@ -270,11 +270,11 @@ def run_ex() -> None:
             check(g, "mac goods_quotes_list", lambda: mac.goods_quotes_list(mkt, count=5))
             check(g, "mac goods_kline", lambda: mac.goods_kline(mkt, "00700", count=5))
             check(g, "mac goods_tick_chart", lambda: mac.goods_tick_chart(mkt, "00700"))
-            # 港股该命令返回空（不支持），改用期货市场验证
+            # 港股该命令不支持；期货非主力合约会间歇无成交，故用美股验证
             check(
                 g,
                 "mac goods_transaction",
-                lambda: mac.goods_transaction(int(ExMarket.ZZ_FUTURES), "AP2610", count=5),
+                lambda: mac.goods_transaction(int(ExMarket.US_STOCK), "A", count=5),
             )
             check(g, "mac goods_chart_sampling", lambda: mac.goods_chart_sampling(mkt, "00700"))
 

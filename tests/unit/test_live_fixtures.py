@@ -249,3 +249,16 @@ def test_mac_capital_flow_fixture() -> None:
     total = d.super_large_net_5d + d.large_net_5d + d.medium_net_5d + d.small_net_5d
     scale = max(abs(d.super_large_net_5d), 1.0)
     assert abs(total) < 0.01 * scale
+
+
+def test_ex_chart_sampling_fixture() -> None:
+    """0x254D 缩略采样（MAC-EX/7727 专用）：42 字节头 + count×f32。
+
+    A 股端口(7709)不响应此命令（代码内改用 0x122D）；HK/期货在无当前交易时段数据时
+    返回空，故 fixture 用美股（有数据）。
+    """
+    from easy_tdx.mac.commands.chart_sampling import ChartSamplingCmd
+
+    prices = ChartSamplingCmd(74, "A").parse_response(load("ex_chart_sampling"))
+    assert len(prices) == 100
+    assert all(p > 0 for p in prices)

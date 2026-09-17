@@ -241,10 +241,16 @@ class TdxConnection:
         self._heartbeat_interval = 0
 
     def _heartbeat_loop(self) -> None:
-        """心跳循环：在后台线程中运行。"""
-        assert self._stop_event is not None
+        """心跳循环：在后台线程中运行。
+
+        断连（含 ``TdxConnectionError``）时安静退出并标记连接失效，避免守护线程
+        抛出未捕获异常刷屏。
+        """
+        stop_event = self._stop_event
+        if stop_event is None:
+            return
         interval = self._heartbeat_interval
-        while not self._stop_event.wait(timeout=interval):
+        while not stop_event.wait(timeout=interval):
             if time.monotonic() - self._last_active <= interval:
                 continue
             with self._lock:
@@ -264,7 +270,7 @@ class TdxConnection:
                     hdr = parse_header(hdr_buf)
                     if hdr.zipsize > 0:
                         _recv_exact_sock(self._sock, hdr.zipsize)
-                except OSError:
+                except (OSError, TdxConnectionError):
                     try:
                         self._sock.close()
                     except OSError:
@@ -287,7 +293,7 @@ class TdxConnection:
                 hdr = parse_header(hdr_buf)
                 if hdr.zipsize > 0:
                     self._recv_exact(hdr.zipsize)
-            except OSError:
+            except (OSError, TdxConnectionError):
                 # 部分服务器的握手无响应，忽略错误
                 pass
 

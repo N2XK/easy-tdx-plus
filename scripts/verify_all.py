@@ -119,8 +119,16 @@ def run_standard() -> None:
             lambda: c.get_minute_aux(Market.SH, "600519", "volume_comparison"),
         )
         check(g, "get_sparkline", lambda: c.get_sparkline(Market.SH, "600519"))
-        check(g, "get_auction_series", lambda: c.get_auction_series(Market.SZ, "000001"))
-        check(g, "get_transaction_data", lambda: c.get_transaction_data(Market.SH, "600519", 0, 50))
+        check(
+            g,
+            "get_auction_series(历史)",
+            lambda: c.get_auction_series(Market.SZ, "000001", date=20260916),
+        )
+        check(
+            g,
+            "get_history_transaction_data",
+            lambda: c.get_history_transaction_data(Market.SH, "600519", 20260916, 0, 50),
+        )
         check(
             g,
             "get_history_transaction_data",
@@ -222,13 +230,19 @@ def run_mac() -> None:
         check(g, "get_tick_chart", lambda: c.get_tick_chart(1, "600519"))
         check(g, "get_tick_charts", lambda: c.get_tick_charts(1, "600519", days=5))
         check(g, "get_chart_sampling", lambda: c.get_chart_sampling(1, "600519"))
-        check(g, "get_transactions", lambda: c.get_transactions(1, "600519", count=50))
+        check(
+            g,
+            "get_transactions(date)",
+            lambda: c.get_transactions(1, "600519", count=50, date=20260916),
+        )
         check(g, "get_symbol_info", lambda: c.get_symbol_info(1, "600519"))
         check(g, "get_board_list", lambda: c.get_board_list())
         check(g, "get_board_members", lambda: c.get_board_members("881001", count=20))
         check(g, "get_belong_board", lambda: c.get_belong_board(1, "600519"))
         check(g, "get_capital_flow", lambda: c.get_capital_flow(1, "600519"))
+        # 今日专属（无日期参数）：盘前/非交易日可能为空（EMPTY 非失败）
         check(g, "get_auction", lambda: c.get_auction(1, "600519"))
+        # 今日专属：盘前可能为空
         check(g, "get_unusual", lambda: c.get_unusual(0, count=20))
         check(g, "get_goods_list", lambda: c.get_goods_list(31, 0, 3))
         check(g, "get_server_info", lambda: c.get_server_info())
@@ -259,7 +273,11 @@ def run_ex() -> None:
             )
             check(g, "get_instrument_quote_list", lambda: c.get_instrument_quote_list(hk, 2, 0, 5))
             check(g, "get_minute_time_data", lambda: c.get_minute_time_data(hk, "00700"))
-            check(g, "get_transaction_data", lambda: c.get_transaction_data(hk, "00700", 0, 5))
+            check(
+                g,
+                "get_history_transaction_data",
+                lambda: c.get_history_transaction_data(hk, "00700", 20260916, 0, 5),
+            )
     mac = _try_client(lambda: MacExClient.from_best_host(timeout=10))
     if mac is not None:
         mkt = int(ExMarket.HK_MAIN_BOARD)

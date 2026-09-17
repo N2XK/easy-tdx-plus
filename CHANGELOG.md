@@ -68,6 +68,8 @@
 
 ### Fixed
 
+- **心跳线程断连时抛出未捕获异常**：`TdxConnection._heartbeat_loop` 只捕 `OSError`，服务器关闭连接时
+  `TdxConnectionError`（"连接被服务器关闭"）会逃逸成线程异常刷屏；现捕获并安静退出、标记连接失效。
 - **MAC 分类/板块列表分页顺序 & 越界返回**：`get_stock_quotes_list`/`get_board_members` 跨页时用
   `batch + all` **前插**导致 `count>80` 时页序颠倒（实测第 80/160 条处涨幅回升），且返回条数越界
   （请求 200 得 240）。现改为顺序追加并裁剪到精确 `count`（sync/async 同修）。
@@ -166,6 +168,8 @@
   capital_flow）与 EX（markets/instrument_count/info/quote/quote_list 港股+期货两套布局/bars/history/
   minute_time/transaction/server_info）逐条锁定字段布局，防"记录布局漂移"类回归。
   离线单测 398 → **421**，覆盖率 65.6% → **68.5%**（相关命令模块 76–94%）。
+- `0x254D`（分时缩略采样）为 **MAC-EX(7727) 专用**：A 股端口(7709)不响应（代码内 `get_chart_sampling`
+  已改走 `0x122D`）；HK/期货在无当前交易时段数据时返回空。新增美股版 fixture 锁其 42 字节头布局。
 
 - 深度排查补充：本地 `.day`/扩展 `.day`/复权因子/`0x124A`/MAC 文件/扩展逐笔与K线等 9 项修复；
   离线单测 392、全接口实测 183/183、联网集成 13、sync/async 12 组逐位对等。

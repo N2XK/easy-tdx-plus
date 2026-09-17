@@ -55,7 +55,7 @@
 
 ### Changed
 
-- **发行包名** `easy-tdx-ng` → **`easy-tdx-plus`**（导入名 `easy_tdx`、CLI `easy-tdx` 均不变）。
+- **发行包名** `easy-tdx-ng` → **`easy-tdx-plus`**（导入名 `easy_tdx`、CLI `easy-tdx` 均不变）；GitHub 仓库同步改名 `N2XK/easy_tdx` → `N2XK/easy-tdx-plus`。
 
 - **性能优化**：`get_fq_bars(qfq)` 改为按需窗口取数（qfq 与窗口无关，已对照服务端），
   近期窗口 2016ms → **67ms**；hfq 仍取全量历史以保持基准正确。

@@ -30,11 +30,11 @@ classifiers = [
 dependencies = ["pandas>=2.0", "tzdata>=2024.1", "click>=8.0"]
 
 [project.urls]
-Homepage = "https://github.com/N2XK/easy_tdx"
-Repository = "https://github.com/N2XK/easy_tdx"
-Issues = "https://github.com/N2XK/easy_tdx/issues"
-Changelog = "https://github.com/N2XK/easy_tdx/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/N2XK/easy_tdx/blob/main/docs/数据字典.md"
+Homepage = "https://github.com/N2XK/easy-tdx-plus"
+Repository = "https://github.com/N2XK/easy-tdx-plus"
+Issues = "https://github.com/N2XK/easy-tdx-plus/issues"
+Changelog = "https://github.com/N2XK/easy-tdx-plus/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/N2XK/easy-tdx-plus/blob/main/docs/数据字典.md"
 
 [project.scripts]
 easy-tdx = "easy_tdx.cli:cli"  # cli/__init__.py exposes the click group

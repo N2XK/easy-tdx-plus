@@ -388,7 +388,10 @@ def parse_index_names(data: bytes) -> list[TdxIndexName]:
         f = ln.split(_FIELD_SEP)
         if len(f) < 4 or f[1] == "":
             continue
-        out.append(TdxIndexName(market=_to_int(f[0]), code=f[1], name=f[3]))
+        # 多数行是 ``市场|代码||名称``，但部分行含额外空字段（如
+        # ``62|000985|||名称``）。命名名称取首个非空的后缀字段，避免取到空串。
+        name = next((part for part in f[3:] if part), "")
+        out.append(TdxIndexName(market=_to_int(f[0]), code=f[1], name=name))
     return out
 
 

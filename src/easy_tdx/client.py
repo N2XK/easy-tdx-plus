@@ -1898,8 +1898,16 @@ class TdxClient:
     ) -> pd.DataFrame:
         """获取个股历史日线资金流向序列。
 
-        优先走 Category 22 直连接口；若服务器返回空列表，则自动回退为
-        "日 K 线取日期 + 历史逐笔成交重算资金流"的兼容实现。
+        .. warning::
+            主路（标准协议 Category 22，``0x052D``）在**公开免费行情服务器上普遍
+            不可用**（返回 2 字节空响应），据协议分析它可能仅 Level-2 / 特定服务器
+            支持。因此本方法在免费池上实际依赖**回退实现**：日 K 线取日期 + 历史逐笔
+            成交，本地按单笔金额分档重算。该口径**非官方**、且逐日拉逐笔较慢。
+
+            需要**服务端真实口径**请改用 MAC 协议的
+            :meth:`easy_tdx.mac.client.MacClient.get_capital_flow`
+            （``0x1218``，今日 + 近 5 日主力/超大/大/中/小单净额；仅快照，无长历史，
+            需按日累积）。
         """
         try:
             direct = self._execute(GetHistoryFundFlowCmd(market, code, start, count))
@@ -1908,12 +1916,17 @@ class TdxClient:
         if direct:
             return _to_df(direct)
 
-        bars = self._execute(GetSecurityBarsCmd(market, code, KlineCategory.DAY, start, count))
+        # 兼容回退：用 _execute_std 以在纯报价/旧版节点上自动回退到全功能主机，
+        # 否则当前主机不支持 K 线时会直接抛 TdxDecodeError。
+        bars = self._execute_std(
+            GetSecurityBarsCmd(market, code, KlineCategory.DAY, start, count),
+            require_nonempty=True,
+        )
         results: list[HistoricalFundFlow] = []
         for bar in bars:
             date = _date_from_bar(bar)
             records = self._collect_transaction_records(
-                lambda page_start, page_size: self._execute(
+                lambda page_start, page_size: self._execute_std(
                     GetHistoryTransactionDataCmd(market, code, date, page_start, page_size)
                 ),
                 800,
@@ -3159,8 +3172,16 @@ class AsyncTdxClient:
     ) -> pd.DataFrame:
         """获取个股历史日线资金流向序列。
 
-        优先走 Category 22 直连接口；若服务器返回空列表，则自动回退为
-        "日 K 线取日期 + 历史逐笔成交重算资金流"的兼容实现。
+        .. warning::
+            主路（标准协议 Category 22，``0x052D``）在**公开免费行情服务器上普遍
+            不可用**（返回 2 字节空响应），据协议分析它可能仅 Level-2 / 特定服务器
+            支持。因此本方法在免费池上实际依赖**回退实现**：日 K 线取日期 + 历史逐笔
+            成交，本地按单笔金额分档重算。该口径**非官方**、且逐日拉逐笔较慢。
+
+            需要**服务端真实口径**请改用 MAC 协议的
+            :meth:`easy_tdx.mac.client.MacClient.get_capital_flow`
+            （``0x1218``，今日 + 近 5 日主力/超大/大/中/小单净额；仅快照，无长历史，
+            需按日累积）。
         """
         try:
             direct = await self._execute(GetHistoryFundFlowCmd(market, code, start, count))
@@ -3169,14 +3190,16 @@ class AsyncTdxClient:
         if direct:
             return _to_df(direct)
 
-        bars = await self._execute(
-            GetSecurityBarsCmd(market, code, KlineCategory.DAY, start, count)
+        # 同同步版：用 _execute_std 以便在纯报价/旧版节点上回退到全功能主机。
+        bars = await self._execute_std(
+            GetSecurityBarsCmd(market, code, KlineCategory.DAY, start, count),
+            require_nonempty=True,
         )
         results: list[HistoricalFundFlow] = []
         for bar in bars:
             date = _date_from_bar(bar)
             records = await self._collect_transaction_records(
-                lambda page_start, page_size: self._execute(
+                lambda page_start, page_size: self._execute_std(
                     GetHistoryTransactionDataCmd(market, code, date, page_start, page_size)
                 ),
                 800,

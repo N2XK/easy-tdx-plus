@@ -80,8 +80,11 @@ def _merge_bar_datetime(df: pd.DataFrame, daily_plus: bool) -> pd.DataFrame:
         + "-"
         + df["day"].astype(str).str.zfill(2)
     )
+    # 服务器偶尔会返回 0-00-00 之类的脏日期；用 errors="coerce" 容错并丢弃这些行，
+    # 避免 pd.to_datetime 直接抛 DateParseError 中断整批解码。
+    col = "date" if daily_plus else "datetime"
     if daily_plus:
-        df.insert(0, "date", pd.to_datetime(date_str))
+        df.insert(0, "date", pd.to_datetime(date_str, errors="coerce"))
     else:
         full_str = (
             date_str
@@ -90,9 +93,9 @@ def _merge_bar_datetime(df: pd.DataFrame, daily_plus: bool) -> pd.DataFrame:
             + ":"
             + df["minute"].astype(str).str.zfill(2)
         )
-        df.insert(0, "datetime", pd.to_datetime(full_str))
+        df.insert(0, "datetime", pd.to_datetime(full_str, errors="coerce"))
     df.drop(columns=["year", "month", "day", "hour", "minute"], inplace=True)
-    return df
+    return df[df[col].notna()].reset_index(drop=True)
 
 
 def _merge_txn_datetime(df: pd.DataFrame, date_int: int) -> pd.DataFrame:

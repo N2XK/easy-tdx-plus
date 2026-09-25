@@ -89,7 +89,8 @@ from .config import (
     save_best_host,
 )
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily, evaluate
-from .exceptions import TdxConnectionError, TdxDecodeError
+from .diagnostics import AttemptDiagnostic, RequestDiagnostics
+from .exceptions import TdxConnectionError, TdxDecodeError, TdxNoCapableHostError
 from .f10 import F10Client, IcfqsClient
 from .fund import is_fund
 from .models.bar import SecurityBar
@@ -455,6 +456,7 @@ class TdxClient:
         heartbeat_interval: float = 15.0,
         rate_limit: bool = False,
         retry_delays: tuple[float, ...] | None = None,
+        allow_failover: bool = True,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
@@ -462,8 +464,12 @@ class TdxClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._retry_delays = retry_delays if retry_delays is not None else get_retry_delays()
+        # 独立的换节点开关：即使 auto_reconnect 开启，也可禁止标准命令回退到备用池，
+        # 保证指定 host 时只访问该节点、不修改全局 best_host。
+        self._allow_failover = allow_failover
         self._conn = TdxConnection(host, port, timeout)
         self._reconnect_lock = threading.Lock()
+        self.last_request_diagnostics: RequestDiagnostics | None = None
         self._zhb_cache: dict[str, bytes] | None = None
         self._f10: F10Client | None = None
         self._icfqs: IcfqsClient | None = None
@@ -545,6 +551,7 @@ class TdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
         require: Iterable[str] | None = None,
+        strict: bool = False,
     ) -> "TdxClient":
         """测量 hosts 中所有服务器延迟，选最低延迟且支持标准协议的建立连接。
 
@@ -555,6 +562,9 @@ class TdxClient:
             require: 需要的能力列表（见 `easy_tdx.capabilities.FEATURES`，如
                 ``["kline","transaction","finance"]``）。给定后会在最低延迟的若干台
                 主机中，选第一台**支持全部所需能力**的，避免调用时才回退。
+            strict: 为 True 且指定了 ``require`` 时，若没有任何节点满足全部能力，
+                抛出 :class:`TdxNoCapableHostError`，**不**静默降级到不保证能力的节点，
+                也不改写全局 best_host。
         """
         if hosts is None:
             hosts = get_known_hosts()
@@ -566,6 +576,11 @@ class TdxClient:
         required_host = select_host(ranked, require, port, timeout, limit=_STD_PROBE_LIMIT)
         if required_host is not None:
             best = required_host
+        elif require and strict:
+            raise TdxNoCapableHostError(
+                f"没有满足能力要求 {sorted(set(require))} 的可用节点"
+                f"（已探测 {len(ranked[:_STD_PROBE_LIMIT])} 台）"
+            )
         else:
             best = ranked[0][0] if ranked else hosts[0]
             # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
@@ -651,12 +666,12 @@ class TdxClient:
                 last_exc: TdxConnectionError = first_exc
                 for delay in self._retry_delays:
                     time.sleep(delay)
-                    self._conn.close()
-                    self._conn = TdxConnection(self._host, self._port, self._timeout)
-                    self._conn.connect()
-                    if self._heartbeat_interval > 0:
-                        self._conn.start_heartbeat(self._heartbeat_interval)
                     try:
+                        self._conn.close()
+                        self._conn = TdxConnection(self._host, self._port, self._timeout)
+                        self._conn.connect()
+                        if self._heartbeat_interval > 0:
+                            self._conn.start_heartbeat(self._heartbeat_interval)
                         return self._conn.execute(cmd)
                     except TdxConnectionError as e:
                         last_exc = e
@@ -703,6 +718,11 @@ class TdxClient:
             empty_result = None
             last_exc = exc
 
+        if not self._allow_failover:
+            if last_exc is not None:
+                raise last_exc
+            return cast("_T", empty_result)
+
         for host in get_full_featured_hosts():
             if host == self._host:
                 continue
@@ -724,6 +744,117 @@ class TdxClient:
         if last_exc is not None:
             raise last_exc
         return cast("_T", empty_result)
+
+    # ------------------------------------------------------------------ #
+    # 有界请求（公开接口）：控制网络预算并记录诊断
+    # ------------------------------------------------------------------ #
+
+    def request(
+        self,
+        cmd: "BaseCommand[_T]",
+        *,
+        pool: Iterable[str] | None = None,
+        max_attempts: int | None = None,
+        total_timeout: float | None = None,
+        require_nonempty: bool = False,
+    ) -> _T:
+        """在给定节点池上执行一次有界请求，并记录逐次诊断。
+
+        与私有 ``_execute`` / ``_execute_std`` 不同，本方法把**节点池、最大尝试次数、
+        总超时**显式暴露给调用方。每次实际尝试的节点、耗时、异常与最终来源都写入
+        ``self.last_request_diagnostics``，无需接触内部实现即可掌控网络预算。
+
+        注意：成功后会把底层连接切到可用节点，但**不修改全局 best_host**。
+
+        Args:
+            pool: 允许访问的节点池；None 时只用当前节点。
+            max_attempts: 最多尝试的节点数；None 表示池内全部。
+            total_timeout: 本次请求的总时间预算（秒）；超预算后不再发起新尝试。
+            require_nonempty: 为 True 时空结果也视为未命中，继续尝试下一个节点。
+
+        失败时抛出最后一次异常；若仅有空结果则返回空结果。
+        """
+        started = time.monotonic()
+        candidates = list(pool) if pool is not None else [self._host]
+        if max_attempts is not None:
+            candidates = candidates[: max(0, max_attempts)]
+
+        attempts: list[AttemptDiagnostic] = []
+        empty_result: Any = None
+        last_exc: Exception | None = None
+        result: Any = None
+        source: str | None = None
+
+        for host in candidates:
+            if total_timeout is not None and (time.monotonic() - started) >= total_timeout:
+                break
+            t0 = time.monotonic()
+            conn = TdxConnection(host, self._port, self._timeout)
+            try:
+                conn.connect()
+                result = conn.execute(cmd)
+            except Exception as exc:  # noqa: BLE001 - 记录后决定是否继续
+                last_exc = exc
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                attempts.append(
+                    AttemptDiagnostic(
+                        host=host,
+                        ok=False,
+                        elapsed=time.monotonic() - t0,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+                continue
+
+            if result or not require_nonempty:
+                source = host
+                attempts.append(
+                    AttemptDiagnostic(host=host, ok=True, elapsed=time.monotonic() - t0)
+                )
+                self._adopt_connection(host, conn)
+                break
+
+            empty_result = result
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+            attempts.append(
+                AttemptDiagnostic(host=host, ok=True, elapsed=time.monotonic() - t0, empty=True)
+            )
+
+        self.last_request_diagnostics = RequestDiagnostics(
+            command=type(cmd).__name__,
+            attempts=tuple(attempts),
+            source=source,
+            elapsed=time.monotonic() - started,
+            exhausted=source is None,
+        )
+        if source is not None:
+            return cast("_T", result)
+        if last_exc is not None:
+            raise last_exc
+        return cast("_T", empty_result)
+
+    def _adopt_connection(self, host: str, conn: TdxConnection) -> None:
+        """接管一次请求成功的连接（不写全局 best_host）。"""
+        old = self._conn
+        if old is not conn:
+            try:
+                old.stop_heartbeat()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                old.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._host = host
+        self._conn = conn
+        if self._heartbeat_interval > 0:
+            conn.start_heartbeat(self._heartbeat_interval)
 
     # ------------------------------------------------------------------ #
     # 市场信息
@@ -1817,6 +1948,7 @@ class AsyncTdxClient:
         heartbeat_interval: float = 60.0,
         rate_limit: bool = False,
         retry_delays: tuple[float, ...] | None = None,
+        allow_failover: bool = True,
     ) -> None:
         self._host = host if host is not None else get_best_host()
         self._port = port if port is not None else get_port()
@@ -1824,8 +1956,10 @@ class AsyncTdxClient:
         self._auto_reconnect = auto_reconnect
         self._heartbeat_interval = heartbeat_interval
         self._retry_delays = retry_delays if retry_delays is not None else get_retry_delays()
+        self._allow_failover = allow_failover
         self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
         self._execute_lock = asyncio.Lock()
+        self.last_request_diagnostics: RequestDiagnostics | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._zhb_cache: dict[str, bytes] | None = None
         self._calendar_cache: dict[
@@ -1870,10 +2004,12 @@ class AsyncTdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
         require: Iterable[str] | None = None,
+        strict: bool = False,
     ) -> "AsyncTdxClient":
         """测量 hosts 中所有服务器延迟，选最低延迟的建立连接。
 
-        自动将最佳主机保存到 config.json。`require` 见 `TdxClient.from_best_host`。
+        自动将最佳主机保存到 config.json。`require` / `strict` 见
+        `TdxClient.from_best_host`。
         """
         if hosts is None:
             hosts = get_known_hosts()
@@ -1885,6 +2021,11 @@ class AsyncTdxClient:
         required_host = select_host(ranked, require, port, timeout, limit=_STD_PROBE_LIMIT)
         if required_host is not None:
             best = required_host
+        elif require and strict:
+            raise TdxNoCapableHostError(
+                f"没有满足能力要求 {sorted(set(require))} 的可用节点"
+                f"（已探测 {len(ranked[:_STD_PROBE_LIMIT])} 台）"
+            )
         else:
             best = ranked[0][0] if ranked else hosts[0]
             # 在最快的若干台主机中，优先选择支持标准协议的全功能服务器
@@ -1973,10 +2114,10 @@ class AsyncTdxClient:
                 last_exc: TdxConnectionError = first_exc
                 for delay in self._retry_delays:
                     await asyncio.sleep(delay)
-                    await self._conn.close()
-                    self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
-                    await self._conn.connect()
                     try:
+                        await self._conn.close()
+                        self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+                        await self._conn.connect()
                         return await self._conn.execute(cmd)
                     except TdxConnectionError as e:
                         last_exc = e
@@ -2007,6 +2148,11 @@ class AsyncTdxClient:
             empty_result = None
             last_exc = exc
 
+        if not self._allow_failover:
+            if last_exc is not None:
+                raise last_exc
+            return cast("_T", empty_result)
+
         for host in get_full_featured_hosts():
             if host == self._host:
                 continue
@@ -2027,6 +2173,97 @@ class AsyncTdxClient:
         if last_exc is not None:
             raise last_exc
         return cast("_T", empty_result)
+
+    async def request(
+        self,
+        cmd: "BaseCommand[_T]",
+        *,
+        pool: Iterable[str] | None = None,
+        max_attempts: int | None = None,
+        total_timeout: float | None = None,
+        require_nonempty: bool = False,
+    ) -> _T:
+        """有界请求（asyncio）：``TdxClient.request`` 的对应实现。
+
+        逐次尝试的节点、耗时、异常与最终来源写入 ``self.last_request_diagnostics``；
+        成功后仅切换底层连接，不修改全局 best_host。
+        """
+        started = time.monotonic()
+        candidates = list(pool) if pool is not None else [self._host]
+        if max_attempts is not None:
+            candidates = candidates[: max(0, max_attempts)]
+
+        attempts: list[AttemptDiagnostic] = []
+        empty_result: Any = None
+        last_exc: Exception | None = None
+        result: Any = None
+        source: str | None = None
+
+        for host in candidates:
+            if total_timeout is not None and (time.monotonic() - started) >= total_timeout:
+                break
+            t0 = time.monotonic()
+            conn = AsyncTdxConnection(host, self._port, self._timeout)
+            try:
+                await conn.connect()
+                result = await conn.execute(cmd)
+            except Exception as exc:  # noqa: BLE001 - 记录后决定是否继续
+                last_exc = exc
+                try:
+                    await conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                attempts.append(
+                    AttemptDiagnostic(
+                        host=host,
+                        ok=False,
+                        elapsed=time.monotonic() - t0,
+                        error=f"{type(exc).__name__}: {exc}",
+                    )
+                )
+                continue
+
+            if result or not require_nonempty:
+                source = host
+                attempts.append(
+                    AttemptDiagnostic(host=host, ok=True, elapsed=time.monotonic() - t0)
+                )
+                await self._adopt_connection(host, conn)
+                break
+
+            empty_result = result
+            try:
+                await conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+            attempts.append(
+                AttemptDiagnostic(host=host, ok=True, elapsed=time.monotonic() - t0, empty=True)
+            )
+
+        self.last_request_diagnostics = RequestDiagnostics(
+            command=type(cmd).__name__,
+            attempts=tuple(attempts),
+            source=source,
+            elapsed=time.monotonic() - started,
+            exhausted=source is None,
+        )
+        if source is not None:
+            return cast("_T", result)
+        if last_exc is not None:
+            raise last_exc
+        return cast("_T", empty_result)
+
+    async def _adopt_connection(self, host: str, conn: AsyncTdxConnection) -> None:
+        """接管一次请求成功的连接（不写全局 best_host）。"""
+        old = self._conn
+        if old is not conn:
+            try:
+                await old.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._host = host
+        self._conn = conn
+        self._start_heartbeat()
 
     async def get_security_count(self, market: Market) -> int:
         return await self._execute(GetSecurityCountCmd(market))

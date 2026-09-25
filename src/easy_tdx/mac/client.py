@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import asdict
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -14,10 +15,17 @@ import pandas as pd
 from .._df import _to_df
 from ..codec.bitmap import Fields, PresetField
 from ..commands.base import BaseCommand
-from ..config import get_best_host, get_mac_hosts, get_port, get_timeout, save_best_host
-from ..exceptions import TdxCommandError, TdxConnectionError
+from ..config import (
+    get_best_mac_host,
+    get_mac_hosts,
+    get_port,
+    get_timeout,
+    save_best_mac_host,
+)
+from ..exceptions import TdxCommandError, TdxConnectionError, TdxNoCapableHostError
 from ..transport.async_ import AsyncTdxConnection
 from ..transport.sync import TdxConnection, ping_mac_all
+from .capabilities import probe_mac_capabilities, select_mac_host
 
 if TYPE_CHECKING:
     from ..ex.mac_client import AsyncMacExClient, MacExClient
@@ -155,7 +163,7 @@ class MacClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
     ) -> None:
-        self._host = host if host is not None else get_best_host()
+        self._host = host if host is not None else get_best_mac_host()
         self._port = port if port is not None else get_port()
         self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
@@ -177,8 +185,18 @@ class MacClient:
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
+        require: Iterable[str] | None = None,
+        strict: bool = False,
     ) -> MacClient:
-        """测量所有 MAC 服务器延迟，选最低延迟的建立客户端。自动保存最佳主机。"""
+        """测量所有 MAC 服务器延迟，选最低延迟的建立客户端。自动保存最佳主机。
+
+        Args:
+            require: 需要的能力（见 :data:`easy_tdx.mac.capabilities.MAC_FEATURES`，
+                如 ``["quotes"]``）。给定后会做真实接口探测，选第一台能力齐全的节点；
+                否则仅按连接延迟选优。
+            strict: ``require`` 非空且无满足节点时，抛 :class:`TdxNoCapableHostError`
+                而不是退回不保证能力的节点。
+        """
         if hosts is None:
             hosts = get_mac_hosts()
         if port is None:
@@ -186,8 +204,16 @@ class MacClient:
         if timeout is None:
             timeout = get_timeout()
         ranked = ping_mac_all(hosts, port, ping_timeout)
-        best = ranked[0][0] if ranked else hosts[0]
-        save_best_host(best)
+        required = select_mac_host(
+            ranked, require, prober=lambda h: probe_mac_capabilities(h, port, timeout)
+        )
+        if required is not None:
+            best = required
+        elif require and strict:
+            raise TdxNoCapableHostError(f"没有满足 MAC 能力要求 {sorted(set(require))} 的可用节点")
+        else:
+            best = ranked[0][0] if ranked else hosts[0]
+        save_best_mac_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
     @staticmethod
@@ -267,12 +293,12 @@ class MacClient:
                 last_exc: TdxConnectionError | None = None
                 for delay in _RETRY_DELAYS:
                     time.sleep(delay)
-                    self._conn.close()
-                    self._conn = TdxConnection(self._host, self._port, self._timeout)
-                    self._conn.connect()
-                    if self._heartbeat_interval > 0:
-                        self._conn.start_heartbeat(self._heartbeat_interval)
                     try:
+                        self._conn.close()
+                        self._conn = TdxConnection(self._host, self._port, self._timeout)
+                        self._conn.connect()
+                        if self._heartbeat_interval > 0:
+                            self._conn.start_heartbeat(self._heartbeat_interval)
                         return self._conn.execute(cmd)
                     except TdxConnectionError as e:
                         last_exc = e
@@ -831,7 +857,7 @@ class AsyncMacClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
     ) -> None:
-        self._host = host if host is not None else get_best_host()
+        self._host = host if host is not None else get_best_mac_host()
         self._port = port if port is not None else get_port()
         self._timeout = timeout if timeout is not None else get_timeout()
         self._auto_reconnect = auto_reconnect
@@ -854,8 +880,13 @@ class AsyncMacClient:
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
         heartbeat_interval: float = 15.0,
+        require: Iterable[str] | None = None,
+        strict: bool = False,
     ) -> AsyncMacClient:
-        """测量所有 MAC 服务器延迟，选最低延迟的建立客户端。自动保存最佳主机。"""
+        """测量所有 MAC 服务器延迟，选最低延迟的建立客户端。自动保存最佳主机。
+
+        ``require`` / ``strict`` 见 :meth:`MacClient.from_best_host`。
+        """
         if hosts is None:
             hosts = get_mac_hosts()
         if port is None:
@@ -863,8 +894,16 @@ class AsyncMacClient:
         if timeout is None:
             timeout = get_timeout()
         ranked = ping_mac_all(hosts, port, ping_timeout)
-        best = ranked[0][0] if ranked else hosts[0]
-        save_best_host(best)
+        required = select_mac_host(
+            ranked, require, prober=lambda h: probe_mac_capabilities(h, port, timeout)
+        )
+        if required is not None:
+            best = required
+        elif require and strict:
+            raise TdxNoCapableHostError(f"没有满足 MAC 能力要求 {sorted(set(require))} 的可用节点")
+        else:
+            best = ranked[0][0] if ranked else hosts[0]
+        save_best_mac_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
     @staticmethod
@@ -968,10 +1007,10 @@ class AsyncMacClient:
                 last_exc: TdxConnectionError | None = None
                 for delay in _RETRY_DELAYS:
                     await asyncio.sleep(delay)
-                    await self._conn.close()
-                    self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
-                    await self._conn.connect()
                     try:
+                        await self._conn.close()
+                        self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+                        await self._conn.connect()
                         return await self._conn.execute(cmd)
                     except TdxConnectionError as e:
                         last_exc = e

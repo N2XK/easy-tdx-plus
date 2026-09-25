@@ -27,3 +27,7 @@ class TdxOfflineError(TdxError):
 
 class TdxValidationError(TdxError):
     """响应数据未通过语义校验（字段越界、OHLC 关系非法等）"""
+
+
+class TdxNoCapableHostError(TdxError):
+    """严格选路模式下，候选节点中没有任何一台满足所需能力要求。"""

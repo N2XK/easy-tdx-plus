@@ -7,6 +7,8 @@
     {
       "best_host": "180.153.18.170",
       "best_host_updated_at": "2026-05-22T10:30:00",
+      "best_mac_host": "121.36.248.138",
+      "best_mac_host_updated_at": "2026-05-22T10:30:00",
       "known_hosts": ["111.229.247.189", ...],
       "calc_hosts": ["120.76.152.87"],
       "mac_hosts": ["121.36.248.138", ...],
@@ -32,6 +34,11 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
+
+try:  # pragma: no cover - 仅非 Unix 平台走 except
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None  # type: ignore[assignment]
 
 # 可重入：读-改-写（_mutate）与外层 _save 会嵌套获取同一把锁。
 _SAVE_LOCK = threading.RLock()
@@ -177,13 +184,35 @@ def _save(data: dict[str, Any]) -> None:
 
 
 @contextmanager
+def _process_lock() -> Iterator[None]:
+    """跨进程互斥锁，保护 config.json 的**完整**读-改-写。
+
+    进程内 `_SAVE_LOCK` 只防同进程多线程；不同进程（如多个 ttquant worker）
+    并发 `save_*` 仍会基于同一份旧快照互相覆盖。这里用 ``flock`` 对整个
+    读-改-写加锁（原子替换文件不能替代并发锁）。非 Unix 平台退化为仅进程内锁。
+    """
+    if fcntl is None:  # pragma: no cover - 非 Unix 平台
+        yield
+        return
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    lock_file = _CONFIG_FILE.with_name(_CONFIG_FILE.name + ".lock")
+    with open(lock_file, "a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
 def _mutate() -> Iterator[dict[str, Any]]:
     """原子的读-改-写：持锁期间加载配置，退出时写回。
 
     避免并行连接时多个 `save_*`（best_host / best_ex_host / capabilities）
-    基于过期快照写回，互相覆盖或丢弃其它字段。
+    基于过期快照写回，互相覆盖或丢弃其它字段。进程内用 `_SAVE_LOCK`，
+    跨进程用 `_process_lock`（文件锁）。
     """
-    with _SAVE_LOCK:
+    with _SAVE_LOCK, _process_lock():
         data = _load()
         yield data
         _save(data)
@@ -264,6 +293,20 @@ def get_best_ex_host() -> str:
         return env
     cfg = _load()
     return cast("str", cfg.get("best_ex_host", _FALLBACK_EX_HOSTS[0]))
+
+
+def get_best_mac_host() -> str:
+    """返回当前最佳 MAC 行情主机。
+
+    与标准协议 ``best_host`` / 扩展行情 ``best_ex_host`` 相互隔离：
+    MAC 选优只影响 MAC 客户端，不会污染其它协议默认节点。
+    优先级：环境变量 > config.json > 默认列表首个。
+    """
+    env = os.environ.get("EASY_TDX_MAC_HOST")
+    if env:
+        return env
+    cfg = _load()
+    return cast("str", cfg.get("best_mac_host", _FALLBACK_MAC_HOSTS[0]))
 
 
 def get_mac_ex_hosts() -> list[str]:
@@ -365,6 +408,15 @@ def save_best_ex_host(host: str) -> None:
             cfg["ex_hosts"] = list(_FALLBACK_EX_HOSTS)
         if "mac_ex_hosts" not in cfg:
             cfg["mac_ex_hosts"] = list(_FALLBACK_MAC_EX_HOSTS)
+
+
+def save_best_mac_host(host: str) -> None:
+    """保存最佳 MAC 行情主机到配置文件（独立于标准协议 ``best_host``）。"""
+    with _mutate() as cfg:
+        cfg["best_mac_host"] = host
+        cfg["best_mac_host_updated_at"] = datetime.now().isoformat()
+        if "mac_hosts" not in cfg:
+            cfg["mac_hosts"] = list(_FALLBACK_MAC_HOSTS)
 
 
 def save_best_mac_ex_host(host: str) -> None:

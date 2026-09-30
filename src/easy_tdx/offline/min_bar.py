@@ -8,6 +8,7 @@ import pandas as pd
 
 from ..exceptions import TdxFileNotFoundError
 from ..models.bar import SecurityBar
+from .daily_bar import _SECURITY_COEFFICIENTS, _detect_security_type
 
 # .5 文件: 日期(2B) 时间(2B) 开盘(4B) 最高(4B) 最低(4B) 收盘(4B) 额(4B) 量(4B) 保留(4B)
 _MIN_FMT = struct.Struct("<HHIIIIfII")
@@ -107,10 +108,17 @@ def _build_df(arr: np.ndarray, price_div: float) -> pd.DataFrame:
     )
 
 
+def _price_div_for_5min(filename: str | Path) -> float:
+    """根据 .5 文件名按证券类型选择协议价格除数。"""
+    sec_type = _detect_security_type(Path(filename).name)
+    price_coeff, _ = _SECURITY_COEFFICIENTS.get(sec_type, (0.01, 0.01))
+    return 1.0 / price_coeff
+
+
 def read_5min_bars(filepath: str | Path) -> list[SecurityBar]:
     """从本地 .5 文件读取 5 分钟 K 线数据。
 
-    OHLC 为整数，需除以 100 得到实际价格。
+    OHLC 为整数，普通股票除以 100；价格精度为 0.1 元的 B 股除以 1000。
 
     Args:
         filepath: .5 文件路径。
@@ -127,7 +135,7 @@ def read_5min_bars(filepath: str | Path) -> list[SecurityBar]:
         return []
 
     arr = np.frombuffer(data, dtype=_MIN_DTYPE, count=len(data) // _MIN_DTYPE.itemsize)
-    return _build_bars(arr, data, price_div=100.0)
+    return _build_bars(arr, data, price_div=_price_div_for_5min(filepath))
 
 
 def read_5min_bars_df(filepath: str | Path) -> pd.DataFrame:
@@ -139,7 +147,7 @@ def read_5min_bars_df(filepath: str | Path) -> pd.DataFrame:
     if len(data) < _MIN_FMT.size:
         return pd.DataFrame(columns=["datetime", "open", "close", "high", "low", "vol", "amount"])
     arr = np.frombuffer(data, dtype=_MIN_DTYPE, count=len(data) // _MIN_DTYPE.itemsize)
-    return _build_df(arr, price_div=100.0)
+    return _build_df(arr, price_div=_price_div_for_5min(filepath))
 
 
 def read_lc_min_bars(filepath: str | Path) -> list[SecurityBar]:

@@ -159,6 +159,11 @@ _FALLBACK_TIMEOUT = 15.0
 _FALLBACK_RETRY_DELAYS: tuple[float, ...] = (0.1, 0.5, 1.0, 2.0)
 
 
+def get_config_dir() -> Path:
+    """返回当前配置目录。"""
+    return _CONFIG_DIR
+
+
 # ---------------------------------------------------------------------------
 # 内部读写
 # ---------------------------------------------------------------------------
@@ -218,11 +223,6 @@ def _mutate() -> Iterator[dict[str, Any]]:
         _save(data)
 
 
-# ---------------------------------------------------------------------------
-# 公开 getter
-# ---------------------------------------------------------------------------
-
-
 def _merge_hosts(primary: list[str], extra: list[str]) -> list[str]:
     """合并主机列表：保留 primary 顺序，追加 extra 中未出现的主机。
 
@@ -235,6 +235,11 @@ def _merge_hosts(primary: list[str], extra: list[str]) -> list[str]:
         if host not in merged:
             merged.append(host)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# 公开 getter
+# ---------------------------------------------------------------------------
 
 
 def get_best_host() -> str:

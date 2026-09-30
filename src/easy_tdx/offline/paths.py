@@ -66,9 +66,11 @@ def resolve_vipdoc(path: str | Path | None = None) -> Path:
 
 
 def _market_to_exchange(market: int) -> str:
-    """Market 枚举值 → vipdoc 子目录名（sh/sz）。"""
+    """Market 枚举值 → vipdoc 子目录名（sh/sz/bj）。"""
     if market == 0:  # Market.SZ
         return "sz"
     if market == 1:  # Market.SH
         return "sh"
+    if market == 2:  # Market.BJ
+        return "bj"
     raise TdxOfflineError(f"不支持的市场代码: {market}")

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from .commands.finance_info import GetFinanceInfoCmd
@@ -40,6 +41,24 @@ _CACHE: dict[str, tuple[float, dict[str, bool]]] = {}
 _TTL = 3600.0
 
 
+def _saved_caps(value: Any) -> dict[str, bool] | None:
+    """读取未过期的持久化能力快照。"""
+    if not isinstance(value, dict) or not isinstance(value.get("caps"), dict):
+        return None
+    timestamp = value.get("ts")
+    if not isinstance(timestamp, str):
+        return None
+    try:
+        saved_at = datetime.fromisoformat(timestamp)
+        now = datetime.now(saved_at.tzinfo) if saved_at.tzinfo is not None else datetime.now()
+        age = abs((now - saved_at).total_seconds())
+    except (TypeError, ValueError):
+        return None
+    if age >= _TTL:
+        return None
+    return {key: bool(item) for key, item in value["caps"].items()}
+
+
 def _probe(conn: Any, features: Iterable[str]) -> dict[str, bool]:
     out: dict[str, bool] = {}
     for name in features:
@@ -58,9 +77,9 @@ def _prior_caps(key: str) -> dict[str, bool]:
     cached = _CACHE.get(key)
     if cached is not None:
         return dict(cached[1])
-    saved = get_capability_cache().get(key)
-    if isinstance(saved, dict) and isinstance(saved.get("caps"), dict):
-        return {k: bool(v) for k, v in saved["caps"].items()}
+    saved = _saved_caps(get_capability_cache().get(key))
+    if saved is not None:
+        return saved
     return {}
 
 
@@ -95,9 +114,9 @@ def probe_capabilities(
         cached = _CACHE.get(key)
         if cached is not None and (time.monotonic() - cached[0]) < _TTL:
             return cached[1]
-        saved = get_capability_cache().get(key)
-        if isinstance(saved, dict) and isinstance(saved.get("caps"), dict):
-            caps = {k: bool(v) for k, v in saved["caps"].items()}
+        saved = _saved_caps(get_capability_cache().get(key))
+        if saved is not None:
+            caps = saved
             _CACHE[key] = (time.monotonic(), caps)
             return caps
 

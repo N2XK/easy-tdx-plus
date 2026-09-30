@@ -116,6 +116,12 @@ def test_offline_finders(tmp_path: Path) -> None:
     assert find_lc1_bar_file(0, "000001", tmp_path).name == f"{ex}000001.lc1"
     assert find_lc5_bar_file(0, "000001", tmp_path).name == f"{ex}000001.lc5"
 
+    bj = _market_to_exchange(2)
+    assert bj == "bj"
+    assert find_5min_bar_file(2, "430047", tmp_path).name == "bj430047.5"
+    assert find_lc1_bar_file(2, "430047", tmp_path).name == "bj430047.lc1"
+    assert find_lc5_bar_file(2, "430047", tmp_path).name == "bj430047.lc5"
+
 
 # --------------------------------------------------------------------------- #
 # 大文件分段拉取 (0x06B9)
@@ -171,6 +177,82 @@ def test_mac_get_goods_list_delegates_to_mac_ex(monkeypatch) -> None:
     assert closed == [True]
     assert c._mac_ex is None
     assert mac_client  # 模块引用，避免未使用告警
+
+
+def test_mac_ex_goods_quotes_list_uses_sort_arguments(monkeypatch) -> None:
+    import pandas as pd
+
+    from easy_tdx.ex.mac_client import MacExClient
+    from easy_tdx.mac.enums import SortOrder, SortType
+    from easy_tdx.mac.models import MacQuoteField
+
+    client = MacExClient("127.0.0.1")
+    monkeypatch.setattr(
+        client,
+        "goods_list",
+        lambda market, start=0, count=600: pd.DataFrame(
+            {"market": [market, market], "code": ["000001", "000002"]}
+        ),
+    )
+    quotes = [
+        MacQuoteField(
+            31,
+            "000001",
+            "A",
+            {"pre_close": 10.0, "close": 10.2, "high": 10.5, "low": 9.9},
+        ),
+        MacQuoteField(
+            31,
+            "000002",
+            "B",
+            {"pre_close": 10.0, "close": 9.8, "high": 10.1, "low": 9.7},
+        ),
+    ]
+    monkeypatch.setattr(client, "_execute", lambda cmd: quotes)
+
+    desc = client.goods_quotes_list(31, sort_type=SortType.CHANGE_PCT, sort_order=SortOrder.DESC)
+    asc = client.goods_quotes_list(31, sort_type=SortType.PRICE, sort_order=SortOrder.ASC)
+    assert desc["code"].tolist() == ["000001", "000002"]
+    assert asc["code"].tolist() == ["000002", "000001"]
+
+
+def test_async_mac_ex_goods_quotes_list_uses_sort_arguments(monkeypatch) -> None:
+    import asyncio
+
+    import pandas as pd
+
+    from easy_tdx.ex.mac_client import AsyncMacExClient
+    from easy_tdx.mac.enums import SortOrder, SortType
+    from easy_tdx.mac.models import MacQuoteField
+
+    async def run() -> None:
+        client = AsyncMacExClient("127.0.0.1")
+        monkeypatch.setattr(
+            client,
+            "goods_list",
+            lambda market, start=0, count=600: _async_frame(
+                pd.DataFrame({"market": [market, market], "code": ["000001", "000002"]})
+            ),
+        )
+        quotes = [
+            MacQuoteField(31, "000001", "A", {"pre_close": 10.0, "close": 10.2}),
+            MacQuoteField(31, "000002", "B", {"pre_close": 10.0, "close": 9.8}),
+        ]
+
+        async def fake_execute(cmd):
+            return quotes
+
+        monkeypatch.setattr(client, "_execute", fake_execute)
+        result = await client.goods_quotes_list(
+            31, sort_type=SortType.CHANGE_PCT, sort_order=SortOrder.ASC
+        )
+        assert result["code"].tolist() == ["000002", "000001"]
+
+    async def _async_frame(frame: pd.DataFrame) -> pd.DataFrame:
+        return frame
+
+    # The async client expects an awaitable goods_list in this focused unit test.
+    asyncio.run(run())
 
 
 def test_category_code_table_parse() -> None:

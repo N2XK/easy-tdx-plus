@@ -1,6 +1,6 @@
 """7615 F10 / TQLEX 模块。"""
 
-from .alt_client import AltF10Client
+from .alt_client import AltF10Client, AsyncAltF10Client
 from .async_client import AsyncF10Client
 from .async_icfqs import AsyncIcfqsClient
 from .client import F10Client, split_code
@@ -18,6 +18,7 @@ __all__ = [
     "F10Client",
     "AsyncF10Client",
     "AltF10Client",
+    "AsyncAltF10Client",
     "F10Response",
     "F10ResultSet",
     "TqlexTransport",

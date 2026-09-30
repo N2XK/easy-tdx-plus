@@ -440,7 +440,7 @@ class AsyncUnifiedTdxClient:
 
     async def _ensure_mac(self) -> AsyncMacClient:
         if self._mac is None:
-            self._mac = AsyncMacClient.from_best_host(
+            self._mac = await AsyncMacClient.from_best_host_async(
                 heartbeat_interval=self._heartbeat_interval,
                 timeout=self._timeout,
             )
@@ -449,13 +449,13 @@ class AsyncUnifiedTdxClient:
 
     async def _ensure_mac_ex(self) -> AsyncMacExClient:
         if self._mac_ex is None:
-            self._mac_ex = AsyncMacExClient.from_best_host(timeout=self._timeout)
+            self._mac_ex = await AsyncMacExClient.from_best_host_async(timeout=self._timeout)
             await self._mac_ex.connect()
         return self._mac_ex
 
     async def _ensure_std(self) -> AsyncTdxClient:
         if self._std is None:
-            self._std = AsyncTdxClient.from_best_host(timeout=self._timeout)
+            self._std = await AsyncTdxClient.from_best_host_async(timeout=self._timeout)
             await self._std.connect()
         return self._std
 

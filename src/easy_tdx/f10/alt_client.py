@@ -13,9 +13,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from typing import Any, cast
 
 from ..exceptions import TdxCommandError
+from .async_client import AsyncF10Client
 from .client import F10Client, _code6
 from .entries import (
     ALT_TQLEX_BASE_URL,
@@ -46,7 +48,7 @@ from .entries import (
 from .models import F10Response
 from .transport import TqlexTransport
 
-__all__ = ["AltF10Client"]
+__all__ = ["AltF10Client", "AsyncAltF10Client"]
 
 # tdxhub 网关只注册 TdxShare* 命名空间；继承自 F10Client 的 CWServ/CWSearch/HQServ
 # 入口在此网关不可用（实测 HTTP 503），需前置拦截并给出清晰提示。
@@ -227,3 +229,142 @@ class AltF10Client(F10Client):
         注意：extras 必须为非空（此处传 "0"），否则服务器返回 -1005。
         """
         return self.params(ENTRY_ALT_NORTHBOUND, _code6(code), "bszj", date, "0", "0", "0")
+
+
+class AsyncAltF10Client(AsyncF10Client):
+    """tdxhub F10 异步客户端。
+
+    主网关的通用异步 F10 方法由 :class:`AsyncF10Client` 提供，tdxhub
+    专属入口通过线程池委托给 :class:`AltF10Client` 执行。
+    """
+
+    def __init__(
+        self,
+        base_url: str = ALT_TQLEX_BASE_URL,
+        timeout: float = 8.0,
+        retries: int = 2,
+        transport: TqlexTransport | None = None,
+        cache: bool = False,
+        cache_ttl: float = 60.0,
+        empty_retries: int = 2,
+        empty_retry_delay: float = 0.5,
+    ) -> None:
+        self._sync = AltF10Client(
+            base_url=base_url,
+            timeout=timeout,
+            retries=retries,
+            transport=transport,
+            cache=cache,
+            cache_ttl=cache_ttl,
+            empty_retries=empty_retries,
+            empty_retry_delay=empty_retry_delay,
+        )
+
+    @property
+    def _alt_sync(self) -> AltF10Client:
+        return cast(AltF10Client, self._sync)
+
+    async def share_capital_structure(self, code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.share_capital_structure, code)
+
+    async def valuation_history(
+        self, code: str, period: str = "1Y", indicator: str = "PE"
+    ) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.valuation_history, code, period, indicator)
+
+    async def hot_topic_overview(self, code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.hot_topic_overview, code)
+
+    async def balance_sheet(self, code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.balance_sheet, code)
+
+    async def income_statement(self, code: str, *, single_quarter: bool = False) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.income_statement, code, single_quarter=single_quarter
+        )
+
+    async def cashflow_statement(self, code: str, *, single_quarter: bool = False) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.cashflow_statement, code, single_quarter=single_quarter
+        )
+
+    async def business_composition(self, code: str, report_date: str | None = None) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.business_composition, code, report_date)
+
+    async def industry_rank(
+        self, code: str, report_date: str = "", *, valuation: bool = False
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.industry_rank, code, report_date, valuation=valuation
+        )
+
+    async def institutional_holding_detail(
+        self,
+        code: str,
+        report_date: str = "",
+        *,
+        type_value: str = "99",
+        page_size: int = 20,
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.institutional_holding_detail,
+            code,
+            report_date,
+            type_value=type_value,
+            page_size=page_size,
+        )
+
+    async def institutional_holding_price_compare(
+        self, code: str, *, query_key: str = "00101"
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.institutional_holding_price_compare, code, query_key=query_key
+        )
+
+    async def research_consensus(self, code: str, *, tag: str = "yzyq") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.research_consensus, code, tag=tag)
+
+    async def theme_boards(self, code: str, *, tag: str = "zttzbkz") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.theme_boards, code, tag=tag)
+
+    async def company_events(self, code: str, *, tag: str = "gsgy") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.company_events, code, tag=tag)
+
+    async def company_basic(self, code: str, *, tag: str = "0") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.company_basic, code, tag=tag)
+
+    async def institutional_holding_dates(self, code: str, *, tag: str = "jgcg") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.institutional_holding_dates, code, tag=tag)
+
+    async def industry_chain(self, industry_code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.industry_chain, industry_code)
+
+    async def industry_valuation(
+        self, industry_code: str, stock_code: str, *, query_type: str = "01"
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._alt_sync.industry_valuation,
+            industry_code,
+            stock_code,
+            query_type=query_type,
+        )
+
+    async def dragon_tiger_list(
+        self, code: str, date: str = "", *, tag: str = "jglhb"
+    ) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.dragon_tiger_list, code, date, tag=tag)
+
+    async def dividend_overview(self, code: str, *, tag: str = "pxmz") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.dividend_overview, code, tag=tag)
+
+    async def dividend_viewer(self, code: str, *, tag: str = "qhgp") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.dividend_viewer, code, tag=tag)
+
+    async def industry_events(self, industry_code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.industry_events, industry_code)
+
+    async def board_basic_info(self, branch: str, code: str) -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.board_basic_info, branch, code)
+
+    async def northbound_funds(self, code: str, date: str = "") -> F10Response:
+        return await asyncio.to_thread(self._alt_sync.northbound_funds, code, date)

@@ -348,6 +348,88 @@ def test_async_f10_client() -> None:
     assert row["T035"] == "A股"
 
 
+def test_async_f10_api_alignment() -> None:
+    import asyncio
+
+    from easy_tdx.f10 import AsyncF10Client
+    from easy_tdx.f10.entries import (
+        ENTRY_ALLOTMENT,
+        ENTRY_COMPANY_NEWS,
+        ENTRY_TOPIC_COMPARE,
+    )
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    client = AsyncF10Client(transport=fake, empty_retries=0)
+
+    async def main() -> None:
+        await client.allotment_dates("600519")
+        assert fake.calls[-1] == (
+            ENTRY_ALLOTMENT,
+            {"Params": ["zfpg_bgq", "600519", ""]},
+        )
+
+        await client.allotment_details("600519", "20241231")
+        assert fake.calls[-1] == (
+            ENTRY_ALLOTMENT,
+            {"Params": ["zfpg", "600519", "20241231"]},
+        )
+
+        await client.topic_compare("600519", 123, section="gndbzfsj", sort_by="zf")
+        assert fake.calls[-1] == (
+            ENTRY_TOPIC_COMPARE,
+            {"Params": ["gndbzfsj", "600519", "123", "zf"]},
+        )
+
+        await client.company_news(
+            "600519",
+            keyword="业绩",
+            rating=3,
+            page=2,
+            page_size=10,
+        )
+        assert fake.calls[-1] == (
+            ENTRY_COMPANY_NEWS,
+            {"Params": ["600519", "gsyj", "业绩", "3", "2", "10"]},
+        )
+
+    asyncio.run(main())
+
+
+def test_async_f10_company_news_all_forwards_filters() -> None:
+    import asyncio
+
+    from easy_tdx.f10 import AsyncF10Client
+
+    fake = _PagedTransport(total=1, page_size=20)
+    client = AsyncF10Client(transport=fake, empty_retries=0)
+
+    async def main() -> list[dict[str, Any]]:
+        return await client.company_news_all(
+            "600519", keyword="业绩", rating="2", page_size=20, max_pages=2
+        )
+
+    rows = asyncio.run(main())
+    assert len(rows) == 1
+    assert fake.calls == 1
+
+
+def test_async_alt_f10_client() -> None:
+    import asyncio
+
+    from easy_tdx import AsyncAltF10Client
+    from easy_tdx.f10.entries import ENTRY_ALT_SHARE_CAPITAL
+
+    fake = _FakeTransport({"ErrorCode": 0})
+    client = AsyncAltF10Client(transport=fake, empty_retries=0)
+
+    async def main() -> None:
+        response = await client.share_capital_structure("600519")
+        assert response.ok
+
+    asyncio.run(main())
+    assert fake.calls == [(ENTRY_ALT_SHARE_CAPITAL, {"Params": ["600519", "gbjg"]})]
+
+
 def test_altf10_rejects_main_gateway_entries() -> None:
     """AltF10(tdxhub) 不支持 CWServ/CWSearch/HQServ 入口，应给出清晰错误而非 503。"""
     import pytest

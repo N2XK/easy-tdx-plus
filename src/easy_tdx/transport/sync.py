@@ -141,17 +141,33 @@ class TdxConnection:
         self._heartbeat_thread: threading.Thread | None = None
         self._last_active: float = 0.0
         self._consecutive_heartbeats: int = 0
+        self._deadline: float | None = None
+
+    def set_deadline(self, deadline: float | None) -> None:
+        """设置本次连接的绝对 IO 截止时间；``None`` 表示使用常规超时。"""
+        self._deadline = deadline
+
+    def _remaining_timeout(self) -> float:
+        if self._deadline is None:
+            return self.timeout
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            raise TdxConnectionError("请求总超时")
+        return min(self.timeout, remaining)
 
     def connect(self) -> None:
         """建立 TCP 连接并完成握手（发送3条 setup 命令）。"""
         with self._lock:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(self.timeout)
             try:
+                sock.settimeout(self._remaining_timeout())
                 sock.connect((self.host, self.port))
             except OSError as e:
                 sock.close()
                 raise TdxConnectionError(f"无法连接 {self.host}:{self.port}: {e}") from e
+            except TdxConnectionError:
+                sock.close()
+                raise
             self._sock = sock
             try:
                 self._send_setup()
@@ -194,7 +210,9 @@ class TdxConnection:
             except OSError as e:
                 raise TdxConnectionError(f"通信错误: {e}") from e
             body = decompress_body(header, raw_body)
-            return cmd.parse_response(body)
+            result = cmd.parse_response(body)
+            self._remaining_timeout()
+            return result
 
     # ------------------------------------------------------------------ #
     # context manager
@@ -286,6 +304,7 @@ class TdxConnection:
         """按序发送三条握手命令并丢弃响应。"""
         assert self._sock is not None
         for cmd_bytes in SETUP_COMMANDS:
+            self._sock.settimeout(self._remaining_timeout())
             self._sock.sendall(cmd_bytes)
             # 读取并丢弃握手响应
             try:
@@ -295,12 +314,21 @@ class TdxConnection:
                     self._recv_exact(hdr.zipsize)
             except (OSError, TdxConnectionError):
                 # 部分服务器的握手无响应，忽略错误
+                if self._deadline is not None and self._deadline <= time.monotonic():
+                    raise
                 pass
 
     def _recv_exact(self, n: int) -> bytes:
         """循环 recv 直到读满 n 字节。"""
         assert self._sock is not None
-        return _recv_exact_sock(self._sock, n)
+        buf = bytearray()
+        while len(buf) < n:
+            self._sock.settimeout(self._remaining_timeout())
+            chunk = self._sock.recv(n - len(buf))
+            if not chunk:
+                raise TdxConnectionError("连接被服务器关闭")
+            buf.extend(chunk)
+        return bytes(buf)
 
     def _drain_pending(self) -> None:
         """丢弃套接字中已到达的残留字节（服务端主动推送帧）。
@@ -318,4 +346,4 @@ class TdxConnection:
                 except (BlockingIOError, InterruptedError):
                     break
         finally:
-            self._sock.settimeout(self.timeout)
+            self._sock.settimeout(self._remaining_timeout())

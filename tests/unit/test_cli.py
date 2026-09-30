@@ -223,18 +223,28 @@ def test_caps_command(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 # --------------------------------------------------------------------------- #
-# 未实现子命令（应显式报错，而非静默）
+# 财务数据命令
 # --------------------------------------------------------------------------- #
 
 
-def test_f10_stub_errors(runner: CliRunner) -> None:
-    res = runner.invoke(cli, ["f10", "SZ", "000001"])
-    assert res.exit_code != 0
+def test_f10(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "easy_tdx.client.TdxClient.from_best_host",
+        classmethod(lambda cls, *a, **k: _StdCtx(get_finance_info=lambda *a, **k: _df())),
+    )
+    res = runner.invoke(cli, ["f10", "SZ", "000001", "--table"])
+    assert res.exit_code == 0, res.output
+    assert "000001" in res.output
 
 
-def test_fund_flow_stub_errors(runner: CliRunner) -> None:
-    res = runner.invoke(cli, ["fund-flow", "SZ", "000001"])
-    assert res.exit_code != 0
+def test_fund_flow(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "easy_tdx.client.TdxClient.from_best_host",
+        classmethod(lambda cls, *a, **k: _StdCtx(get_history_fund_flow=lambda *a, **k: _df())),
+    )
+    res = runner.invoke(cli, ["fund-flow", "SZ", "000001", "--start", "2", "--count", "5"])
+    assert res.exit_code == 0, res.output
+    assert "000001" in res.output
 
 
 class _StdCtx:

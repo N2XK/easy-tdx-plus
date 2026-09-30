@@ -81,6 +81,7 @@ from .commands.xdxr_info import GetXdxrInfoCmd
 from .config import (
     get_best_host,
     get_calc_hosts,
+    get_config_dir,
     get_full_featured_hosts,
     get_known_hosts,
     get_port,
@@ -91,7 +92,7 @@ from .config import (
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily, evaluate
 from .diagnostics import AttemptDiagnostic, RequestDiagnostics
 from .exceptions import TdxConnectionError, TdxDecodeError, TdxNoCapableHostError
-from .f10 import F10Client, IcfqsClient
+from .f10 import AsyncF10Client, AsyncIcfqsClient, F10Client, IcfqsClient
 from .fund import is_fund
 from .models.bar import SecurityBar
 from .models.configdata import SpBlock
@@ -384,7 +385,6 @@ def _historical_fund_flow_from_records(
 # 同步客户端
 # ============================================================
 
-_CACHE_DIR = Path.home() / ".easy_tdx" / "cache"
 _CACHE_MAX_AGE = 86400  # 1 天
 
 
@@ -400,8 +400,13 @@ def _deserialize_stocks(data: list[dict[str, Any]]) -> list[SecurityInfo]:
 _CACHE_SCHEMA = 2
 
 
+def _cache_dir() -> Path:
+    """返回跟随 ``EASY_TDX_CONFIG_DIR`` 的证券缓存目录。"""
+    return get_config_dir() / "cache"
+
+
 def _load_cache() -> list[SecurityInfo] | None:
-    path = _CACHE_DIR / "security_list_all.json"
+    path = _cache_dir() / "security_list_all.json"
     if not path.exists():
         return None
     try:
@@ -421,16 +426,15 @@ def _load_cache() -> list[SecurityInfo] | None:
 
 
 def _save_cache(stocks: list[SecurityInfo]) -> None:
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_dir = _cache_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
     data = {
         "schema": _CACHE_SCHEMA,
         "updated": datetime.now().isoformat(),
         "count": len(stocks),
         "data": _serialize_stocks(stocks),
     }
-    (_CACHE_DIR / "security_list_all.json").write_text(
-        json.dumps(data, ensure_ascii=False), "utf-8"
-    )
+    (cache_dir / "security_list_all.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
 
 
 class TdxClient:
@@ -707,14 +711,14 @@ class TdxClient:
                 （适用于正常必有数据的命令，如行情、逐笔成交）。
         """
         empty_result: Any = None
-        last_exc: TdxDecodeError | None
+        last_exc: TdxConnectionError | TdxDecodeError | None
         try:
             result = self._execute(cmd)
             if result or not require_nonempty:
                 return result
             empty_result = result
             last_exc = None
-        except TdxDecodeError as exc:
+        except (TdxConnectionError, TdxDecodeError) as exc:
             empty_result = None
             last_exc = exc
 
@@ -726,15 +730,17 @@ class TdxClient:
         for host in get_full_featured_hosts():
             if host == self._host:
                 continue
+            conn = TdxConnection(host, self._port, self._timeout)
             try:
-                conn = TdxConnection(host, self._port, self._timeout)
                 conn.connect()
-                try:
-                    result = conn.execute(cmd)
-                finally:
-                    conn.close()
+                result = conn.execute(cmd)
             except Exception:
                 continue
+            finally:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
             if result or not require_nonempty:
                 self._switch_host(host)
                 return result
@@ -786,10 +792,19 @@ class TdxClient:
         source: str | None = None
 
         for host in candidates:
-            if total_timeout is not None and (time.monotonic() - started) >= total_timeout:
+            remaining = (
+                total_timeout - (time.monotonic() - started) if total_timeout is not None else None
+            )
+            if remaining is not None and remaining <= 0:
                 break
             t0 = time.monotonic()
-            conn = TdxConnection(host, self._port, self._timeout)
+            attempt_timeout = (
+                min(self._timeout, remaining) if remaining is not None else self._timeout
+            )
+            conn = TdxConnection(host, self._port, attempt_timeout)
+            set_deadline = getattr(conn, "set_deadline", None)
+            if callable(set_deadline) and total_timeout is not None:
+                set_deadline(started + total_timeout)
             try:
                 conn.connect()
                 result = conn.execute(cmd)
@@ -853,6 +868,9 @@ class TdxClient:
                 pass
         self._host = host
         self._conn = conn
+        clear_deadline = getattr(conn, "set_deadline", None)
+        if callable(clear_deadline):
+            clear_deadline(None)
         if self._heartbeat_interval > 0:
             conn.start_heartbeat(self._heartbeat_interval)
 
@@ -904,6 +922,7 @@ class TdxClient:
             log.warning("无法获取 tdxhy.cfg，行业字段将为空")
 
         all_stocks: list[SecurityInfo] = []
+        complete = True
         for market in [Market.SH, Market.SZ]:
             count = self.get_security_count(market)
             limit = _max_start(count)
@@ -912,6 +931,7 @@ class TdxClient:
                 try:
                     stocks = self._execute(GetSecurityListCmd(market, start))
                 except Exception:
+                    complete = False
                     log.warning(
                         "%s 第 %d/%d 页获取失败，跳过", market.name, page_idx + 1, total_pages
                     )
@@ -930,7 +950,7 @@ class TdxClient:
 
         log.info("沪深 A 股总数: %d", len(all_stocks))
 
-        if pages == "all":
+        if pages == "all" and complete:
             _save_cache(all_stocks)
 
         return _to_df(all_stocks)
@@ -1974,6 +1994,8 @@ class AsyncTdxClient:
         self._execute_lock = asyncio.Lock()
         self.last_request_diagnostics: RequestDiagnostics | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
+        self._f10: AsyncF10Client | None = None
+        self._icfqs: AsyncIcfqsClient | None = None
         self._zhb_cache: dict[str, bytes] | None = None
         self._calendar_cache: dict[
             tuple[Market, str, KlineCategory, int, int], tuple[float, TradingCalendar]
@@ -1999,6 +2021,20 @@ class AsyncTdxClient:
         self._zhb_cache = None
         _STD_CAPABILITY_CACHE.clear()
 
+    @property
+    def f10(self) -> AsyncF10Client:
+        """7615 F10 / TQLEX 异步客户端（懒加载）。"""
+        if self._f10 is None:
+            self._f10 = AsyncF10Client()
+        return self._f10
+
+    @property
+    def icfqs(self) -> AsyncIcfqsClient:
+        """ICFQS 7615 异步客户端（懒加载）。"""
+        if self._icfqs is None:
+            self._icfqs = AsyncIcfqsClient()
+        return self._icfqs
+
     async def get_capabilities(
         self, host: str | None = None, *, refresh: bool = False
     ) -> dict[str, bool]:
@@ -2015,7 +2051,7 @@ class AsyncTdxClient:
         timeout: float | None = None,
         ping_timeout: float = 5.0,
         auto_reconnect: bool = True,
-        heartbeat_interval: float = 60.0,
+        heartbeat_interval: float = 15.0,
         require: Iterable[str] | None = None,
         strict: bool = False,
     ) -> "AsyncTdxClient":
@@ -2024,6 +2060,15 @@ class AsyncTdxClient:
         自动将最佳主机保存到 config.json。`require` / `strict` 见
         `TdxClient.from_best_host`。
         """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "AsyncTdxClient.from_best_host() 会阻塞事件循环；"
+                "请在协程中使用 await AsyncTdxClient.from_best_host_async()"
+            )
         if hosts is None:
             hosts = get_known_hosts()
         if port is None:
@@ -2049,6 +2094,31 @@ class AsyncTdxClient:
         save_best_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
 
+    @classmethod
+    async def from_best_host_async(
+        cls,
+        hosts: list[str] | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
+        ping_timeout: float = 5.0,
+        auto_reconnect: bool = True,
+        heartbeat_interval: float = 15.0,
+        require: Iterable[str] | None = None,
+        strict: bool = False,
+    ) -> "AsyncTdxClient":
+        """在线程中执行同步选优，避免阻塞 asyncio 事件循环。"""
+        return await asyncio.to_thread(
+            cls.from_best_host,
+            hosts,
+            port,
+            timeout,
+            ping_timeout,
+            auto_reconnect,
+            heartbeat_interval,
+            require,
+            strict,
+        )
+
     @staticmethod
     def ping_all(
         hosts: list[str] | None = None,
@@ -2069,6 +2139,21 @@ class AsyncTdxClient:
     async def close(self) -> None:
         await self._stop_heartbeat()
         await self._conn.close()
+
+    async def disconnect(self) -> None:
+        """Alias for close()."""
+        await self.close()
+
+    async def ensure_connected(self) -> None:
+        """验证连接存活，断线则自动重建。"""
+        try:
+            await self._execute(GetSecurityCountCmd(Market.SH))
+        except TdxConnectionError:
+            await self._stop_heartbeat()
+            await self._conn.close()
+            self._conn = AsyncTdxConnection(self._host, self._port, self._timeout)
+            await self._conn.connect()
+            self._start_heartbeat()
 
     async def __aenter__(self) -> "AsyncTdxClient":
         await self.connect()
@@ -2150,14 +2235,14 @@ class AsyncTdxClient:
         ``TdxClient._execute_std`` 的 asyncio 对应实现。
         """
         empty_result: Any = None
-        last_exc: TdxDecodeError | None
+        last_exc: TdxConnectionError | TdxDecodeError | None
         try:
             result = await self._execute(cmd)
             if result or not require_nonempty:
                 return result
             empty_result = result
             last_exc = None
-        except TdxDecodeError as exc:
+        except (TdxConnectionError, TdxDecodeError) as exc:
             empty_result = None
             last_exc = exc
 
@@ -2213,13 +2298,41 @@ class AsyncTdxClient:
         source: str | None = None
 
         for host in candidates:
-            if total_timeout is not None and (time.monotonic() - started) >= total_timeout:
+            remaining = (
+                total_timeout - (time.monotonic() - started) if total_timeout is not None else None
+            )
+            if remaining is not None and remaining <= 0:
                 break
             t0 = time.monotonic()
-            conn = AsyncTdxConnection(host, self._port, self._timeout)
+            attempt_timeout = (
+                min(self._timeout, remaining) if remaining is not None else self._timeout
+            )
+            conn = AsyncTdxConnection(host, self._port, attempt_timeout)
             try:
-                await conn.connect()
-                result = await conn.execute(cmd)
+
+                async def _run_attempt() -> Any:
+                    await conn.connect()
+                    return await conn.execute(cmd)
+
+                if remaining is None:
+                    result = await _run_attempt()
+                else:
+                    result = await asyncio.wait_for(_run_attempt(), timeout=remaining)
+            except asyncio.TimeoutError:
+                last_exc = TdxConnectionError(f"请求总超时（预算 {total_timeout}s）")
+                attempts.append(
+                    AttemptDiagnostic(
+                        host=host,
+                        ok=False,
+                        elapsed=time.monotonic() - t0,
+                        error=f"{type(last_exc).__name__}: {last_exc}",
+                    )
+                )
+                try:
+                    await conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                break
             except Exception as exc:  # noqa: BLE001 - 记录后决定是否继续
                 last_exc = exc
                 try:
@@ -2318,6 +2431,7 @@ class AsyncTdxClient:
             log.warning("无法获取 tdxhy.cfg，行业字段将为空")
 
         all_stocks: list[SecurityInfo] = []
+        complete = True
         for market in [Market.SH, Market.SZ]:
             count = await self.get_security_count(market)
             limit = _max_start(count)
@@ -2326,6 +2440,7 @@ class AsyncTdxClient:
                 try:
                     stocks = await self._execute(GetSecurityListCmd(market, start))
                 except Exception:
+                    complete = False
                     log.warning(
                         "%s 第 %d/%d 页获取失败，跳过", market.name, page_idx + 1, total_pages
                     )
@@ -2343,7 +2458,7 @@ class AsyncTdxClient:
                         all_stocks.append(s)
 
         log.info("沪深 A 股总数: %d", len(all_stocks))
-        if pages == "all":
+        if pages == "all" and complete:
             _save_cache(all_stocks)
         return _to_df(all_stocks)
 

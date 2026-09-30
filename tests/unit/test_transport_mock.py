@@ -98,6 +98,24 @@ def test_execute_zlib_body(monkeypatch: pytest.MonkeyPatch) -> None:
     assert conn.execute(_Cmd()) == "compressed-payload"  # type: ignore[arg-type]
 
 
+def test_execute_checks_deadline_after_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeSocket(incoming=_frame(b"") * 3 + _frame(b"payload"))
+    monkeypatch.setattr(tsync.socket, "socket", lambda *a, **k: fake)
+    conn = tsync.TdxConnection(host="127.0.0.1", port=7709, timeout=1.0)
+    conn.connect()
+    monkeypatch.setattr(conn, "_drain_pending", lambda: None)
+
+    class _DeadlineCmd(_Cmd):
+        def parse_response(self, body: bytes) -> str:
+            conn.set_deadline(0.0)
+            return super().parse_response(body)
+
+    with pytest.raises(TdxConnectionError, match="总超时"):
+        conn.execute(_DeadlineCmd())
+
+
 def test_execute_without_connect() -> None:
     conn = tsync.TdxConnection(host="127.0.0.1", port=7709, timeout=1.0)
     with pytest.raises(TdxConnectionError):

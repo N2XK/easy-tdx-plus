@@ -37,10 +37,11 @@ _SECURITY_COEFFICIENTS: dict[str, tuple[float, float]] = {
     "SH_FUND": (0.001, 1.0),
     "SH_BOND": (0.001, 1.0),
     "SZ_A_STOCK": (0.01, 0.01),
-    "SZ_B_STOCK": (0.01, 0.01),
+    "SZ_B_STOCK": (0.001, 0.01),
     "SZ_INDEX": (0.01, 1.0),
     "SZ_FUND": (0.001, 0.01),
     "SZ_BOND": (0.001, 0.01),
+    "BJ_A_STOCK": (0.01, 0.01),
 }
 
 
@@ -91,6 +92,8 @@ def _detect_security_type(filename: str) -> str:
             "20",
         ):
             return "SH_BOND"
+    elif exchange == "bj":
+        return "BJ_A_STOCK"
 
     return "SZ_A_STOCK"  # 默认按 A 股处理
 
@@ -189,7 +192,7 @@ def find_daily_bar_file(
     """根据市场和代码定位日线文件路径。
 
     Args:
-        market: 市场代码（Market.SZ=0, Market.SH=1）。
+        market: 市场代码（Market.SZ=0, Market.SH=1, Market.BJ=2）。
         code: 6 位股票代码。
         vipdoc: vipdoc 目录路径，None 则自动检测。
 

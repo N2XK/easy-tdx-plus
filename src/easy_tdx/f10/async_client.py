@@ -90,6 +90,19 @@ class AsyncF10Client:
     async def dividend_financing(self, code: str, section: str = "fh") -> F10Response:
         return await asyncio.to_thread(self._sync.dividend_financing, code, section)
 
+    async def allotment_dates(self, code: str) -> F10Response:
+        return await asyncio.to_thread(self._sync.allotment_dates, code)
+
+    async def allotment_details(self, code: str, allotment_date: str) -> F10Response:
+        return await asyncio.to_thread(self._sync.allotment_details, code, allotment_date)
+
+    async def topic_compare(
+        self, code: str, topic_id: str | int, section: str = "gndbzfsj", sort_by: str = "zdf"
+    ) -> F10Response:
+        return await asyncio.to_thread(
+            self._sync.topic_compare, code, topic_id, section=section, sort_by=sort_by
+        )
+
     async def stock_score(self, code: str, section: str = "pf", arg: str = "") -> F10Response:
         return await asyncio.to_thread(self._sync.stock_score, code, section, arg)
 
@@ -114,17 +127,43 @@ class AsyncF10Client:
         )
 
     async def company_news(
-        self, code: str, section: str = "gsyj", *, page: int = 1, page_size: int = 20
+        self,
+        code: str,
+        section: str = "gsyj",
+        *,
+        keyword: str = "",
+        rating: str | int = "0",
+        page: int = 1,
+        page_size: int = 20,
     ) -> F10Response:
         return await asyncio.to_thread(
-            self._sync.company_news, code, section, page=page, page_size=page_size
+            self._sync.company_news,
+            code,
+            section,
+            keyword=keyword,
+            rating=rating,
+            page=page,
+            page_size=page_size,
         )
 
     async def company_news_all(
-        self, code: str, section: str = "gsyj", *, page_size: int = 20, max_pages: int = 50
+        self,
+        code: str,
+        section: str = "gsyj",
+        *,
+        keyword: str = "",
+        rating: str | int = "0",
+        page_size: int = 20,
+        max_pages: int = 50,
     ) -> list[dict[str, Any]]:
         return await asyncio.to_thread(
-            self._sync.company_news_all, code, section, page_size=page_size, max_pages=max_pages
+            self._sync.company_news_all,
+            code,
+            section,
+            keyword=keyword,
+            rating=rating,
+            page_size=page_size,
+            max_pages=max_pages,
         )
 
     async def northbound_holding(

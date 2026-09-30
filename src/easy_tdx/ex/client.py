@@ -290,12 +290,42 @@ class AsyncExTdxClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
     ) -> "AsyncExTdxClient":
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "AsyncExTdxClient.from_best_host() 会阻塞事件循环；"
+                "请在协程中使用 await AsyncExTdxClient.from_best_host_async()"
+            )
         if hosts is None:
             hosts = get_ex_hosts()
         ranked = ping_ex_all(hosts, port, ping_timeout)
         best = ranked[0][0] if ranked else hosts[0]
         save_best_ex_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
+
+    @classmethod
+    async def from_best_host_async(
+        cls,
+        hosts: list[str] | None = None,
+        port: int = _DEFAULT_EX_PORT,
+        timeout: float = 15.0,
+        ping_timeout: float = 5.0,
+        auto_reconnect: bool = True,
+        heartbeat_interval: float = 60.0,
+    ) -> "AsyncExTdxClient":
+        """在线程中执行同步选优，避免阻塞 asyncio 事件循环。"""
+        return await asyncio.to_thread(
+            cls.from_best_host,
+            hosts,
+            port,
+            timeout,
+            ping_timeout,
+            auto_reconnect,
+            heartbeat_interval,
+        )
 
     @staticmethod
     def ping_all(
@@ -317,6 +347,22 @@ class AsyncExTdxClient:
     async def close(self) -> None:
         await self._stop_heartbeat()
         await self._conn.close()
+
+    async def disconnect(self) -> None:
+        """Alias for close()."""
+        await self.close()
+
+    async def ensure_connected(self) -> None:
+        """验证连接存活，断线则自动重建。"""
+        try:
+            await self._execute(GetExInstrumentCountCmd())
+        except TdxConnectionError:
+            await self._stop_heartbeat()
+            await self._conn.close()
+            self._conn = AsyncExTdxConnection(self._host, self._port, self._timeout)
+            await self._conn.connect()
+            await self._conn.execute(MacExLoginCmd())
+            self._start_heartbeat()
 
     async def __aenter__(self) -> "AsyncExTdxClient":
         await self.connect()

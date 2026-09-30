@@ -12,7 +12,7 @@ from .models import F10Response, F10ResultSet
 def _columns(raw: Mapping[str, Any]) -> list[str]:
     for key in ("ColName", "ColDes"):
         value = raw.get(key)
-        if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        if not isinstance(value, Sequence) or isinstance(value, str | bytes | bytearray):
             continue
         names: list[str] = []
         for item in value:
@@ -25,7 +25,7 @@ def _columns(raw: Mapping[str, Any]) -> list[str]:
 
 
 def _row_values(row: Any) -> list[Any]:
-    if isinstance(row, Sequence) and not isinstance(row, (str, bytes, bytearray)):
+    if isinstance(row, Sequence) and not isinstance(row, str | bytes | bytearray):
         return list(row)
     return [row]
 
@@ -47,7 +47,7 @@ def _parse_result_set(raw: Any, index: int) -> F10ResultSet:
         raise TdxDecodeError("TQLEX ResultSet 必须是对象")
     columns = _columns(raw)
     content = raw.get("Content") or ()
-    if not isinstance(content, Sequence) or isinstance(content, (str, bytes, bytearray)):
+    if not isinstance(content, Sequence) or isinstance(content, str | bytes | bytearray):
         raise TdxDecodeError("TQLEX Content 必须是数组")
     rows = tuple(_row_dict(columns, _row_values(row)) for row in content)
     key = raw.get("ResultSetKey")
@@ -63,7 +63,7 @@ def parse_tqlex_response(entry: str, request_body: Any, raw: Mapping[str, Any]) 
     """将 TQLEX 原始 JSON 解析为 ``F10Response``。"""
     result_sets_raw = raw.get("ResultSets") or ()
     if not isinstance(result_sets_raw, Sequence) or isinstance(
-        result_sets_raw, (str, bytes, bytearray)
+        result_sets_raw, str | bytes | bytearray
     ):
         raise TdxDecodeError("TQLEX ResultSets 必须是数组")
     result_sets = tuple(_parse_result_set(item, i) for i, item in enumerate(result_sets_raw))

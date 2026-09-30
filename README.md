@@ -147,8 +147,8 @@ easy-tdx ex tick HK_MAIN_BOARD 00700 --table               # 港股分时
 | `symbol-info` | 个股特征快照 |
 | `history-transaction` | 某历史日全部逐笔（自动分页） |
 | `trading-calendar` | 交易日列表（含节假日） |
-| `f10` | F10 公司信息（占位，未实现） |
-| `fund-flow` | 历史资金流向（占位，未实现） |
+| `f10` | 标准协议财务数据 |
+| `fund-flow` | 历史资金流向 |
 | `ex kline` | 扩展市场 K 线 |
 | `ex quote` | 扩展市场报价 |
 | `ex quote-list` | 扩展市场商品列表 |
@@ -159,13 +159,19 @@ easy-tdx ex tick HK_MAIN_BOARD 00700 --table               # 港股分时
 
 ### 连接管理
 
-所有客户端支持 `from_best_host()` 自动选最低延迟服务器：
+同步客户端支持 `from_best_host()` 自动选最低延迟服务器；异步客户端使用
+`await from_best_host_async()`，避免阻塞事件循环：
 
 ```python
 from easy_tdx import MacClient
 
 with MacClient.from_best_host() as c:
     df = c.get_stock_kline(...)
+```
+
+```python
+client = await AsyncMacClient.from_best_host_async()
+await client.connect()
 ```
 
 | 客户端 | 端口 | 覆盖范围 |
@@ -541,7 +547,8 @@ F10 覆盖 **40+ Entry**：公司概况、财务报表、主营构成、分红�
 盈利预测、估值、题材行情、热点题材、题材内对比、公司资讯、北向持股、股东增减持、
 **十大股东 / 十大流通股东 / 机构持股（汇总·明细·对比·报告期）/ 股东人数 / 股东人数排名**、
 排名、治理、详情、公告/新闻/路演、涨跌停榜。未封装的 Entry 可用
-`F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`。
+`F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`；
+tdxhub 专属接口对应 `AsyncAltF10Client`。
 
 **AltF10Client**（`tdxhub.icfqs.com` 网关，额外入口）：`share_capital_structure`（股本结构）、
 `valuation_history`（估值历史）、`balance_sheet`/`income_statement`/`cashflow_statement`（三表）、
@@ -554,6 +561,13 @@ from easy_tdx import AltF10Client
 alt = AltF10Client()
 bs = alt.balance_sheet("600519")        # 资产负债表（数据在 resp.tables[1]）
 pe = alt.valuation_history("600519", period="1Y", indicator="PE")
+```
+
+```python
+from easy_tdx import AsyncAltF10Client
+
+alt = AsyncAltF10Client()
+bs = await alt.balance_sheet("600519")
 ```
 
 **配置类数据（zhb.zip）**：`get_ah_rates`（A/H 对照）、`get_adr_list`、`get_industry_chain`（产业链）、

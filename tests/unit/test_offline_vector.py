@@ -69,6 +69,26 @@ def test_5min_vectorized(tmp_path: Path) -> None:
     assert str(df["datetime"].iloc[0]) == "2026-09-15 09:35:00"
 
 
+def test_b_stock_price_scale_and_bj_daily_scale(tmp_path: Path) -> None:
+    b_daily = _DAILY_FMT.pack(20260915, 10000, 10100, 9900, 10050, 12345.0, 500, 0)
+    b_daily_path = tmp_path / "sz200011.day"
+    b_daily_path.write_bytes(b_daily)
+    assert read_daily_bars(b_daily_path)[0].open == pytest.approx(10.0)
+    assert read_daily_bars_df(b_daily_path)["close"].iloc[0] == pytest.approx(10.05)
+
+    b_minute = _MIN_FMT.pack(
+        _tdx_date(2026, 9, 15), 9 * 60 + 35, 10000, 10100, 9900, 10050, 123.0, 500, 0
+    )
+    b_minute_path = tmp_path / "sz200011.5"
+    b_minute_path.write_bytes(b_minute)
+    assert read_5min_bars(b_minute_path)[0].open == pytest.approx(10.0)
+    assert read_5min_bars_df(b_minute_path)["close"].iloc[0] == pytest.approx(10.05)
+
+    bj_path = tmp_path / "bj430047.day"
+    bj_path.write_bytes(b_daily)
+    assert read_daily_bars(bj_path)[0].open == pytest.approx(100.0)
+
+
 def test_lc_min_vectorized(tmp_path: Path) -> None:
     body = _LC_FMT.pack(_tdx_date(2026, 9, 15), 13 * 60 + 5, 10.5, 10.6, 10.4, 10.55, 123.0, 500, 0)
     path = tmp_path / "sh600519.lc5"
@@ -125,6 +145,8 @@ def test_security_coefficients_match_mootdx() -> None:
     from easy_tdx.offline.daily_bar import _SECURITY_COEFFICIENTS, _detect_security_type
 
     assert _SECURITY_COEFFICIENTS["SZ_BOND"] == (0.001, 0.01)
+    assert _SECURITY_COEFFICIENTS["SZ_B_STOCK"] == (0.001, 0.01)
+    assert _SECURITY_COEFFICIENTS["BJ_A_STOCK"] == (0.01, 0.01)
     assert _SECURITY_COEFFICIENTS["SH_FUND"] == (0.001, 1.0)
     assert _SECURITY_COEFFICIENTS["SZ_FUND"] == (0.001, 0.01)
     assert _SECURITY_COEFFICIENTS["SH_STAR_STOCK"] == (0.01, 0.01)

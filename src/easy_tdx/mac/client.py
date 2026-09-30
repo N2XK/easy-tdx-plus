@@ -887,6 +887,15 @@ class AsyncMacClient:
 
         ``require`` / ``strict`` 见 :meth:`MacClient.from_best_host`。
         """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "AsyncMacClient.from_best_host() 会阻塞事件循环；"
+                "请在协程中使用 await AsyncMacClient.from_best_host_async()"
+            )
         if hosts is None:
             hosts = get_mac_hosts()
         if port is None:
@@ -905,6 +914,31 @@ class AsyncMacClient:
             best = ranked[0][0] if ranked else hosts[0]
         save_best_mac_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
+
+    @classmethod
+    async def from_best_host_async(
+        cls,
+        hosts: list[str] | None = None,
+        port: int | None = None,
+        timeout: float | None = None,
+        ping_timeout: float = 5.0,
+        auto_reconnect: bool = True,
+        heartbeat_interval: float = 15.0,
+        require: Iterable[str] | None = None,
+        strict: bool = False,
+    ) -> AsyncMacClient:
+        """在线程中执行同步选优，避免阻塞 asyncio 事件循环。"""
+        return await asyncio.to_thread(
+            cls.from_best_host,
+            hosts,
+            port,
+            timeout,
+            ping_timeout,
+            auto_reconnect,
+            heartbeat_interval,
+            require,
+            strict,
+        )
 
     @staticmethod
     def ping_all(
@@ -1381,7 +1415,7 @@ class AsyncMacClient:
         if ex is None:
             from ..ex.mac_client import AsyncMacExClient
 
-            ex = AsyncMacExClient.from_best_host(timeout=self._timeout)
+            ex = await AsyncMacExClient.from_best_host_async(timeout=self._timeout)
             await ex.connect()
             self._mac_ex = ex
         return await ex.goods_list(market, start, count)

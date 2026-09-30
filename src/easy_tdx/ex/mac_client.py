@@ -8,11 +8,12 @@ import asyncio
 import threading
 from datetime import date
 from types import TracebackType
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import pandas as pd
 
 from .._df import _to_df
+from ..codec.bitmap import FieldBit, Fields, FieldSelection, PresetField
 from ..commands.base import BaseCommand
 from ..config import get_best_mac_ex_host, get_mac_ex_hosts, save_best_mac_ex_host
 from ..exceptions import TdxConnectionError
@@ -41,6 +42,109 @@ def _quotes_to_df(result: list[MacQuoteField]) -> pd.DataFrame:
         row.update(item.fields)
         rows.append(row)
     return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+_SORT_FIELD_BITS: dict[SortType, tuple[FieldBit, ...]] = {
+    SortType.PRE_CLOSE: (FieldBit.PRE_CLOSE,),
+    SortType.OPEN: (FieldBit.OPEN,),
+    SortType.HIGH: (FieldBit.HIGH,),
+    SortType.LOW: (FieldBit.LOW,),
+    SortType.PRICE: (FieldBit.CLOSE,),
+    SortType.BID: (FieldBit.BID_PRICE,),
+    SortType.ASK: (FieldBit.ASK_PRICE,),
+    SortType.VOLUME: (FieldBit.VOL,),
+    SortType.TOTAL_AMOUNT: (FieldBit.AMOUNT,),
+    SortType.LAST_VOLUME: (FieldBit.LAST_VOLUME,),
+    SortType.AVG: (FieldBit.AVG_PRICE,),
+    SortType.PE_DYNAMIC: (FieldBit.PE_DYNAMIC,),
+    SortType.ENTRUST_RATIO: (FieldBit.BID_ASK_RATIO,),
+    SortType.INSIDE_VOLUME: (FieldBit.INSIDE_VOLUME,),
+    SortType.OUTSIDE_VOLUME: (FieldBit.OUTSIDE_VOLUME,),
+    SortType.BID_VOLUME: (FieldBit.BID_VOLUME,),
+    SortType.ASK_VOLUME: (FieldBit.ASK_VOLUME,),
+    SortType.OPEN_AMOUNT: (FieldBit.OPEN_AMOUNT,),
+    SortType.VOL_RATIO: (FieldBit.VOL_RATIO,),
+    SortType.TURNOVER_RATE: (FieldBit.TURNOVER,),
+    SortType.FLOAT_SHARES: (FieldBit.FLOAT_SHARES,),
+    SortType.TOTAL_MARKET_CAP_AB: (FieldBit.TOTAL_MARKET_CAP_AB,),
+    SortType.SPEED_PCT: (FieldBit.SPEED_PCT,),
+    SortType.ACTIVITY: (FieldBit.ACTIVITY,),
+    SortType.VOL_SPEED_PCT: (FieldBit.VOL_SPEED_PCT,),
+    SortType.SHORT_TURNOVER_PCT: (FieldBit.SHORT_TURNOVER_PCT,),
+    SortType.MAIN_NET_AMOUNT: (FieldBit.MAIN_NET_AMOUNT,),
+    SortType.MAIN_NET_RATIO: (FieldBit.MAIN_NET_RATIO,),
+    SortType.AMOUNT_2M: (FieldBit.AMOUNT_2M,),
+}
+
+_SORT_FIELD_NAMES: dict[SortType, str] = {
+    sort_type: field_bits[0].field_name for sort_type, field_bits in _SORT_FIELD_BITS.items()
+}
+_SORT_FIELD_NAMES.update(
+    {
+        SortType.CODE: "code",
+        SortType.NAME: "name",
+        SortType.CHANGE: "__change",
+        SortType.CHANGE_PCT: "__change_pct",
+        SortType.AMPLITUDE_PCT: "__amplitude_pct",
+        SortType.IN_OUT_RATIO: "__in_out_ratio",
+        SortType.OPEN_PCT: "__open_pct",
+        SortType.HIGH_PCT: "__high_pct",
+        SortType.LOW_PCT: "__low_pct",
+    }
+)
+
+
+def _goods_quote_fields(sort_type: SortType) -> Fields:
+    """返回排序所需字段，避免扩展市场报价排序依赖缺失列。"""
+    fields: FieldSelection = FieldSelection(PresetField.COMMON)
+    for field_bit in _SORT_FIELD_BITS.get(sort_type, ()):
+        fields = fields + field_bit
+    return fields
+
+
+def _sort_goods_quotes(
+    quotes: pd.DataFrame,
+    sort_type: SortType,
+    sort_order: SortOrder,
+) -> pd.DataFrame:
+    """按 ``SortType`` 在扩展市场报价结果上做稳定排序。"""
+    order = SortOrder(sort_order)
+    if order is SortOrder.NONE or quotes.empty:
+        return quotes
+
+    sort_name = SortType(sort_type)
+    sort_column = _SORT_FIELD_NAMES.get(sort_name)
+    if sort_column is None:
+        raise ValueError(f"扩展市场报价暂不支持排序字段: {sort_name.name}")
+
+    result = quotes.copy()
+    if sort_column == "__change":
+        result[sort_column] = result["close"] - result["pre_close"]
+    elif sort_column == "__change_pct":
+        result[sort_column] = (
+            (result["close"] - result["pre_close"]) / result["pre_close"].replace(0, pd.NA) * 100
+        )
+    elif sort_column == "__amplitude_pct":
+        result[sort_column] = (
+            (result["high"] - result["low"]) / result["pre_close"].replace(0, pd.NA) * 100
+        )
+    elif sort_column == "__in_out_ratio":
+        result[sort_column] = result["inside_volume"] / result["outside_volume"].replace(0, pd.NA)
+    elif sort_column in {"__open_pct", "__high_pct", "__low_pct"}:
+        price_column = sort_column[2:-4]
+        result[sort_column] = (
+            (result[price_column] - result["pre_close"])
+            / result["pre_close"].replace(0, pd.NA)
+            * 100
+        )
+    elif sort_column not in result.columns:
+        raise ValueError(f"扩展市场报价响应缺少排序字段: {sort_column}")
+
+    return (
+        result.sort_values(sort_column, ascending=order is SortOrder.ASC, kind="mergesort")
+        .drop(columns=[sort_column] if sort_column.startswith("__") else [], errors="ignore")
+        .reset_index(drop=True)
+    )
 
 
 # ============================================================
@@ -301,9 +405,9 @@ class MacExClient:
         count : int
             返回条数（最大 80，受报价批量限制）。
         sort_type : SortType
-            排序字段（暂未实现排序，预留接口）。
+            排序字段。排序在扩展市场报价结果上稳定执行。
         sort_order : SortOrder
-            排序方向（暂未实现排序，预留接口）。
+            排序方向。``NONE`` 保持商品列表原始顺序。
         """
         page_size = min(count, 80)
         items_df = self.goods_list(market, start=start, count=page_size)
@@ -312,9 +416,9 @@ class MacExClient:
         stocks: list[tuple[int, str]] = []
         for _, row in items_df.iterrows():
             stocks.append((market, row["code"]))
-        cmd = SymbolQuotesCmd(stocks)
+        cmd = SymbolQuotesCmd(stocks, _goods_quote_fields(SortType(sort_type)))
         result: list[MacQuoteField] = self._execute(cmd)
-        return _quotes_to_df(result)
+        return _sort_goods_quotes(_quotes_to_df(result), SortType(sort_type), SortOrder(sort_order))
 
     def goods_kline(
         self,
@@ -483,11 +587,41 @@ class AsyncMacExClient:
         auto_reconnect: bool = True,
         heartbeat_interval: float = 60.0,
     ) -> "AsyncMacExClient":
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "AsyncMacExClient.from_best_host() 会阻塞事件循环；"
+                "请在协程中使用 await AsyncMacExClient.from_best_host_async()"
+            )
         candidates = hosts or get_mac_ex_hosts()
         ranked = ping_ex_all(candidates, port, ping_timeout)
         best = ranked[0][0] if ranked else candidates[0]
         save_best_mac_ex_host(best)
         return cls(best, port, timeout, auto_reconnect, heartbeat_interval)
+
+    @classmethod
+    async def from_best_host_async(
+        cls,
+        hosts: list[str] | None = None,
+        port: int = _DEFAULT_PORT,
+        timeout: float = 15.0,
+        ping_timeout: float = 5.0,
+        auto_reconnect: bool = True,
+        heartbeat_interval: float = 60.0,
+    ) -> "AsyncMacExClient":
+        """在线程中执行同步选优，避免阻塞 asyncio 事件循环。"""
+        return await asyncio.to_thread(
+            cls.from_best_host,
+            hosts,
+            port,
+            timeout,
+            ping_timeout,
+            auto_reconnect,
+            heartbeat_interval,
+        )
 
     @staticmethod
     def ping_all(
@@ -509,6 +643,26 @@ class AsyncMacExClient:
     async def close(self) -> None:
         await self._stop_heartbeat()
         await self._conn.close()
+
+    async def disconnect(self) -> None:
+        """关闭扩展 MAC 连接。"""
+        await self.close()
+
+    async def ensure_connected(self) -> None:
+        """验证连接存活，断线则自动重建并重新登录。"""
+        try:
+            await self._execute(GetExInstrumentCountCmd())
+        except TdxConnectionError:
+            await self._conn.close()
+            self._conn = AsyncExTdxConnection(
+                self._host,
+                self._port,
+                self._timeout,
+                mac_ex_mode=True,
+            )
+            await self._conn.connect()
+            await self._login()
+            self._start_heartbeat()
 
     async def __aenter__(self) -> "AsyncMacExClient":
         await self.connect()
@@ -627,7 +781,9 @@ class AsyncMacExClient:
     async def _instrument_count(self) -> int:
         """商品总数（实例内缓存）。"""
         if self._instrument_total is None:
-            self._instrument_total = await self._execute(GetExInstrumentCountCmd())
+            count_cmd: BaseCommand[int] = GetExInstrumentCountCmd()
+            count = await self._execute(cast(BaseCommand[int | None], count_cmd))
+            self._instrument_total = count if count is not None else 0
         return self._instrument_total
 
     async def _find_market_offset(self, market: int) -> int:
@@ -679,9 +835,9 @@ class AsyncMacExClient:
         if items_df.empty:
             return pd.DataFrame()
         stocks: list[tuple[int, str]] = [(market, row["code"]) for _, row in items_df.iterrows()]
-        cmd = SymbolQuotesCmd(stocks)
+        cmd = SymbolQuotesCmd(stocks, _goods_quote_fields(SortType(sort_type)))
         result: list[MacQuoteField] = await self._execute(cmd)
-        return _quotes_to_df(result)
+        return _sort_goods_quotes(_quotes_to_df(result), SortType(sort_type), SortOrder(sort_order))
 
     # ------------------------------------------------------------------ #
     # K 线

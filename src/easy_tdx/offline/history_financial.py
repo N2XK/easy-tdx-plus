@@ -34,7 +34,7 @@ def read_history_financial(filepath: str | Path) -> list[FinancialRecord]:
     raw_records = parse_financial_dat(data)
     results: list[FinancialRecord] = []
     for code, market_byte, report_date, fields in raw_records:
-        value = market_byte[0] if isinstance(market_byte, (bytes, bytearray)) else int(market_byte)
+        value = market_byte[0] if isinstance(market_byte, bytes | bytearray) else int(market_byte)
         try:
             market = Market(value)
         except ValueError:
@@ -91,10 +91,10 @@ def read_financial_history_panel(
     Returns:
         含 ``code / market / report_date / f0..fN`` 的面板，按 (code, report_date) 升序。
     """
-    if isinstance(source, (str, Path)) and Path(source).is_dir():
+    if isinstance(source, str | Path) and Path(source).is_dir():
         base = Path(source)
         paths = sorted(base.glob("gpcw*.zip")) + sorted(base.glob("gpcw*.dat"))
-    elif isinstance(source, (str, Path)):
+    elif isinstance(source, str | Path):
         paths = [Path(source)]
     else:
         paths = [Path(p) for p in source]

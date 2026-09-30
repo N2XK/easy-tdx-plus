@@ -108,7 +108,7 @@
 3. 7615 未封装的其余 Entry：可用 `F10Client.call(entry, params=[...])` 手动调用。
 4. `.htc` 分笔**记录级**解码：无公开规范、社区参考实现亦未完成，不发布猜测性解码器（历史逐笔改用 `get_history_transaction_all`）。
 5. Level-2 深度行情（逐笔委托/十档/撤单）：免费协议不提供。
-6. CLI 的 `f10` / `fund-flow`：已在 `--help` 注册但为占位，调用即报错。
+6. CLI 的 `f10` / `fund-flow`：已实现，支持默认 JSON、`--table` 与 `--output csv`。
 
 ## 工程优化（参考 tdxrs）
 
@@ -156,4 +156,3 @@
 | [`docs/ROADMAP_补全方案.md`](ROADMAP_补全方案.md) | 本文件：方案与实施状态 |
 | [`CHANGELOG.md`](../CHANGELOG.md) | 变更日志 |
 | [`examples/`](../examples/) | 可运行示例 |
-

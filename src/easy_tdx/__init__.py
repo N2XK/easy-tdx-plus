@@ -34,6 +34,7 @@ from .exceptions import (
     TdxConnectionError,
     TdxDecodeError,
     TdxError,
+    TdxSemanticError,
     TdxValidationError,
 )
 from .f10 import (
@@ -41,12 +42,14 @@ from .f10 import (
     AsyncAltF10Client,
     AsyncF10Client,
     AsyncIcfqsClient,
+    AsyncTqlexTransport,
     F10Client,
     F10Response,
     F10ResultSet,
     IcfqsClient,
 )
 from .fund import classify_fund, is_fund
+from .health import EndpointHealth, HostHealthRegistry
 from .mac.client import AsyncMacClient, MacClient
 from .mac.enums import (
     Adjust,
@@ -108,7 +111,9 @@ from .models import (
     XdxrRecord,
 )
 from .parallel import ParallelTdx
+from .provenance import DataProvenance, attach_provenance, get_provenance
 from .ratelimit import AsyncRateLimiter, RateLimiter, detect_phase
+from .storage import ClickHouseSink, DuckDBSink, ParquetSink, StorageError, StorageSink
 from .trading_calendar import TradingCalendar
 from .transport.sync import CALC_HOSTS, KNOWN_HOSTS, MAC_HOSTS, ping_all, ping_mac_all
 from .unified import AsyncUnifiedTdxClient, UnifiedTdxClient
@@ -126,6 +131,7 @@ __all__ = [
     "F10ResultSet",
     "IcfqsClient",
     "AsyncIcfqsClient",
+    "AsyncTqlexTransport",
     "MacClient",
     "AsyncMacClient",
     "MacExClient",
@@ -195,6 +201,7 @@ __all__ = [
     "TdxDecodeError",
     "TdxCommandError",
     "TdxValidationError",
+    "TdxSemanticError",
     # 扩展行情
     "ExTdxClient",
     "AsyncExTdxClient",
@@ -213,6 +220,16 @@ __all__ = [
     "to_tuples",
     "classify_fund",
     "is_fund",
+    "EndpointHealth",
+    "HostHealthRegistry",
+    "DataProvenance",
+    "attach_provenance",
+    "get_provenance",
+    "StorageSink",
+    "StorageError",
+    "ParquetSink",
+    "DuckDBSink",
+    "ClickHouseSink",
     "check_bars",
     "validate_bars",
     # 技术指标

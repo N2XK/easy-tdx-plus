@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- 公式解释器求值上下文改为 `contextvars`，并发线程/任务之间不再共享临时状态。
+- 同步/异步标准传输统一使用绝对 deadline；异步请求发送前清理已到达的服务端推送帧。
+- 新增 `DataProvenance`、`TdxSemanticError` 和 `strict_semantics`，明确标注近似资金流与最新股本回填历史等口径。
+- 新增可选 `ParquetSink`、`DuckDBSink`、`ClickHouseSink` 存储接口和主机 `HostHealthRegistry`。
+- F10 异步客户端增加可选 `native_http=True` 的 `httpx` 传输层；默认仍保持零额外依赖。
+
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 

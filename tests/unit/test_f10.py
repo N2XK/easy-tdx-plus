@@ -348,6 +348,40 @@ def test_async_f10_client() -> None:
     assert row["T035"] == "A股"
 
 
+def test_async_f10_native_http_high_level_method(monkeypatch: Any) -> None:
+    """native_http 模式的高层入口应通过异步传输发送请求。"""
+    import asyncio
+
+    from easy_tdx.f10 import AsyncF10Client
+
+    raw = _load("f10_company_profile.json")
+
+    class _FakeAsyncTransport:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def post(self, entry: str, body: Any) -> dict[str, Any]:
+            self.calls.append((entry, body))
+            return raw
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr("easy_tdx.f10.async_client.AsyncTqlexTransport", _FakeAsyncTransport)
+    client = AsyncF10Client(native_http=True, empty_retries=0)
+
+    async def main() -> dict[str, Any]:
+        response = await client.company_profile("600519")
+        await client.aclose()
+        return response.first_row()
+
+    row = asyncio.run(main())
+    transport = client._async_transport
+    assert isinstance(transport, _FakeAsyncTransport)
+    assert transport.calls == [("CWServ.tdxf10_gg_gsgk", {"Params": ["8", "600519", ""]})]
+    assert row["T035"] == "A股"
+
+
 def test_async_f10_api_alignment() -> None:
     import asyncio
 

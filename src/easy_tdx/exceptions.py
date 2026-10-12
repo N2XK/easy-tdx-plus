@@ -31,3 +31,7 @@ class TdxValidationError(TdxError):
 
 class TdxNoCapableHostError(TdxError):
     """严格选路模式下，候选节点中没有任何一台满足所需能力要求。"""
+
+
+class TdxSemanticError(TdxError):
+    """数据口径不满足严格语义或回测安全要求。"""

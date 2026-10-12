@@ -12,7 +12,7 @@ from .icfqs import (
 )
 from .models import F10Response, F10ResultSet
 from .parse import parse_tqlex_response
-from .transport import TqlexTransport
+from .transport import AsyncTqlexTransport, TqlexTransport
 
 __all__ = [
     "F10Client",
@@ -22,6 +22,7 @@ __all__ = [
     "F10Response",
     "F10ResultSet",
     "TqlexTransport",
+    "AsyncTqlexTransport",
     "IcfqsClient",
     "AsyncIcfqsClient",
     "parse_tqlex_response",

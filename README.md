@@ -550,6 +550,13 @@ F10 覆盖 **40+ Entry**：公司概况、财务报表、主营构成、分红�
 `F10Client.call(entry, params=[...])` 直接调用。异步版为 `AsyncF10Client`；
 tdxhub 专属接口对应 `AsyncAltF10Client`。
 
+`AsyncF10Client(native_http=True)` 使用可选依赖 `httpx` 的原生异步 HTTP 传输；单请求高层
+入口和 `call`/`params` 会直接走异步网络。需要自动分页或组合多个请求的入口（例如
+`company_news_all`、`limit_up_down_list`，以及自动查询报告期的 `business_composition`）
+仍会在线程池中复用同步实现，以保持请求顺序和结果语义一致。ICFQS 的
+`AsyncIcfqsClient` 当前也保持线程包装模式；安装原生异步 F10 依赖：
+`pip install easy-tdx-plus[async-http]`。
+
 **AltF10Client**（`tdxhub.icfqs.com` 网关，额外入口）：`share_capital_structure`（股本结构）、
 `valuation_history`（估值历史）、`balance_sheet`/`income_statement`/`cashflow_statement`（三表）、
 `business_composition`、`industry_rank`、`research_consensus`（研报一致预期）、`theme_boards`、
@@ -670,6 +677,15 @@ hot.lhb_yz_detail("600519", "20260801", "20260915") # 游资明细
 `get_server_info`(0x2455) / `get_table`(0x2422)。
 `MacExClient`：`goods_count/list/quotes/kline/tick_chart/chart_sampling/transaction`（港/美/期货）。
 > 连接后自动完成扩展登录（0x2454）。
+
+## 数据语义与可选存储
+
+派生接口会在 `DataFrame.attrs["provenance"]` 中记录来源、时间点和是否近似。回测时可
+使用 `strict_semantics=True` 拒绝最新股本回填历史或本地逐笔分档估算等结果，详见
+[`docs/数据语义与存储.md`](docs/数据语义与存储.md)。
+
+核心包提供可选的 `ParquetSink`、`DuckDBSink` 和 `ClickHouseSink`，数据库驱动按需安装，
+不会改变基础行情客户端的轻量依赖。
 
 ## 架构
 

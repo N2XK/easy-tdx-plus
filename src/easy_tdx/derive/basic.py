@@ -10,6 +10,7 @@ from typing import Any
 
 import pandas as pd
 
+from ..provenance import DataProvenance, attach_provenance
 from .adjust import compute_pre_close_series
 
 __all__ = ["compute_basic_daily"]
@@ -44,4 +45,12 @@ def compute_basic_daily(
         df["float_mv"] = (df["close"] * float_shares).round(2)
     if total_shares > 0:
         df["total_mv"] = (df["close"] * total_shares).round(2)
-    return df
+    return attach_provenance(
+        df,
+        DataProvenance(
+            source="7709.daily_bars",
+            point_in_time=False,
+            is_approximate=False,
+            calculation_method="pre_close + supplied share counts",
+        ),
+    )

@@ -1,6 +1,7 @@
 """异步 TCP 连接（基于 asyncio）。"""
 
 import asyncio
+import time
 from types import TracebackType
 from typing import TYPE_CHECKING, TypeVar
 
@@ -37,6 +38,19 @@ class AsyncTdxConnection:
         self._writer: asyncio.StreamWriter | None = None
         # 单连接不支持请求复用；所有 IO 在连接内串行执行。
         self._io_lock = asyncio.Lock()
+        self._deadline: float | None = None
+
+    def set_deadline(self, deadline: float | None) -> None:
+        """设置本次连接使用的 monotonic 绝对截止时间。"""
+        self._deadline = deadline
+
+    def _remaining_timeout(self) -> float:
+        if self._deadline is None:
+            return self.timeout
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            raise TdxConnectionError("请求总超时")
+        return min(self.timeout, remaining)
 
     async def connect(self) -> None:
         """建立 TCP 连接并完成握手。"""
@@ -60,8 +74,9 @@ class AsyncTdxConnection:
                 raise TdxConnectionError("未连接，请先调用 connect()")
             request = cmd.build_request()
             try:
+                self._drain_pending()
                 self._writer.write(request)
-                await asyncio.wait_for(self._writer.drain(), timeout=self.timeout)
+                await asyncio.wait_for(self._writer.drain(), timeout=self._remaining_timeout())
                 header_buf = await self._recv_exact(HEADER_SIZE)
                 header = parse_header(header_buf)
                 raw_body = await self._recv_exact(header.zipsize)
@@ -127,7 +142,7 @@ class AsyncTdxConnection:
         assert self._reader is not None
         for cmd_bytes in SETUP_COMMANDS:
             self._writer.write(cmd_bytes)
-            await asyncio.wait_for(self._writer.drain(), timeout=self.timeout)
+            await asyncio.wait_for(self._writer.drain(), timeout=self._remaining_timeout())
             try:
                 hdr_buf = await self._recv_exact(HEADER_SIZE)
                 hdr = parse_header(hdr_buf)
@@ -141,6 +156,19 @@ class AsyncTdxConnection:
         assert self._reader is not None
         data = await asyncio.wait_for(
             self._reader.readexactly(n),
-            timeout=self.timeout,
+            timeout=self._remaining_timeout(),
         )
         return data
+
+    def _drain_pending(self) -> None:
+        """清除前一请求留下的服务端 push 帧，避免响应错位。
+
+        ``StreamReader`` 没有公开的非阻塞 drain API；在发送下一请求前清空其
+        已经到达的内部 buffer 是安全的，因为此时持有连接 IO 锁且没有请求在途。
+        """
+        reader = self._reader
+        if reader is None:
+            return
+        buffer = getattr(reader, "_buffer", None)
+        if buffer is not None:
+            buffer.clear()

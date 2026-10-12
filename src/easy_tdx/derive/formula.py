@@ -25,6 +25,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator, MutableMapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -906,10 +908,52 @@ _FUNCS: dict[str, Any] = {
     "STDDEV": _fn_stdp,
 }
 
+
 # 供函数取用当前数据索引（求值期间设置）
-_INDEX: dict[str, pd.Index] = {}
+class _ContextMap(MutableMapping[str, Any]):
+    """A small ``dict``-compatible view backed by a ContextVar.
+
+    Formula functions historically read module globals while evaluating.  A
+    context-local mapping preserves that internal API while making concurrent
+    calls independent across threads and asyncio tasks.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._var: ContextVar[dict[str, Any]] = ContextVar(name, default={})
+
+    def __getitem__(self, key: str) -> Any:
+        return self._var.get()[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        current = dict(self._var.get())
+        current[key] = value
+        self._var.set(current)
+
+    def __delitem__(self, key: str) -> None:
+        current = dict(self._var.get())
+        del current[key]
+        self._var.set(current)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._var.get())
+
+    def __len__(self) -> int:
+        return len(self._var.get())
+
+    def clear(self) -> None:
+        self._var.set({})
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        current = dict(self._var.get())
+        current.update(*args, **kwargs)
+        self._var.set(current)
+
+
+# 供函数取用当前数据索引（求值期间设置）。这是 context-local 的，避免并发
+# evaluate() 相互覆盖。
+_INDEX: MutableMapping[str, Any] = _ContextMap("easy_tdx_formula_index")
 # 供无参指标函数（OBV/ATR/PDI/SAR 等）取用行情列（求值期间设置）
-_ENV: dict[str, Any] = {}
+_ENV: MutableMapping[str, Any] = _ContextMap("easy_tdx_formula_env")
 
 
 def _eval(node: Any, env: dict[str, Any], index: pd.Index) -> Any:

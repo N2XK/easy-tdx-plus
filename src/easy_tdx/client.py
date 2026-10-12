@@ -91,7 +91,7 @@ from .config import (
 )
 from .derive import adjust_bars, compute_adjust_factors, compute_basic_daily, evaluate
 from .diagnostics import AttemptDiagnostic, RequestDiagnostics
-from .exceptions import TdxConnectionError, TdxDecodeError, TdxNoCapableHostError
+from .exceptions import TdxConnectionError, TdxDecodeError, TdxNoCapableHostError, TdxSemanticError
 from .f10 import AsyncF10Client, AsyncIcfqsClient, F10Client, IcfqsClient
 from .fund import is_fund
 from .models.bar import SecurityBar
@@ -106,6 +106,7 @@ from .models.quote import TRADING_STATUS_SUSPENDED
 from .models.security import SecurityInfo
 from .models.stats import FundFlow, HistoricalFundFlow, MarketStat
 from .models.timeseries import TransactionRecord
+from .provenance import DataProvenance, attach_provenance
 from .ratelimit import AsyncRateLimiter, RateLimiter
 from .trading_calendar import TradingCalendar
 from .transport.async_ import AsyncTdxConnection
@@ -1652,6 +1653,8 @@ class TdxClient:
         end_date: int | None = None,
         float_shares: float | None = None,
         total_shares: float | None = None,
+        *,
+        strict_semantics: bool = False,
     ) -> pd.DataFrame:
         """每日基础指标：前收盘 / 涨跌幅 / 振幅 / 换手率 / 市值。
 
@@ -1659,6 +1662,12 @@ class TdxClient:
         """
         if end_date is None:
             end_date = _today_in_shanghai()
+        supplied_shares = float_shares is not None and total_shares is not None
+        if strict_semantics and not supplied_shares:
+            raise TdxSemanticError(
+                "get_basic_daily 需要显式提供 point-in-time 股本；默认财务数据是最新快照，"
+                "可能产生未来信息泄漏"
+            )
         bars, events = self._daily_bars_with_xdxr(market, code, start_date, end_date)
         if float_shares is None or total_shares is None:
             fin = self.get_finance_info(market, code)
@@ -1667,11 +1676,22 @@ class TdxClient:
                     float_shares = float(fin.iloc[0].get("liutong_guben", 0.0) or 0.0)
                 if total_shares is None:
                     total_shares = float(fin.iloc[0].get("zong_guben", 0.0) or 0.0)
-        return compute_basic_daily(
+        result = compute_basic_daily(
             bars,
             events,
             float_shares=float_shares or 0.0,
             total_shares=total_shares or 0.0,
+        )
+        return attach_provenance(
+            result,
+            DataProvenance(
+                source="7709.daily_bars+finance_snapshot",
+                point_in_time=supplied_shares,
+                is_approximate=not supplied_shares,
+                calculation_method="latest finance share counts"
+                if not supplied_shares
+                else "explicit share counts",
+            ),
         )
 
     def get_formula(
@@ -1914,7 +1934,7 @@ class TdxClient:
         return _to_df(_classify_fund_flow(records))
 
     def get_history_fund_flow(
-        self, market: Market, code: str, start: int, count: int
+        self, market: Market, code: str, start: int, count: int, *, strict_semantics: bool = False
     ) -> pd.DataFrame:
         """获取个股历史日线资金流向序列。
 
@@ -1934,7 +1954,19 @@ class TdxClient:
         except Exception:
             direct = []
         if direct:
-            return _to_df(direct)
+            return attach_provenance(
+                _to_df(direct),
+                DataProvenance(
+                    source="7709.history_fund_flow",
+                    point_in_time=True,
+                    calculation_method="server reported historical fund flow",
+                ),
+            )
+
+        if strict_semantics:
+            raise TdxSemanticError(
+                "服务器未提供历史资金流向原始口径；strict_semantics=True 时拒绝按逐笔金额分档估算"
+            )
 
         # 兼容回退：用 _execute_std 以在纯报价/旧版节点上自动回退到全功能主机，
         # 否则当前主机不支持 K 线时会直接抛 TdxDecodeError。
@@ -1952,7 +1984,15 @@ class TdxClient:
                 800,
             )
             results.append(_historical_fund_flow_from_records(date, records))
-        return _to_df(results)
+        return attach_provenance(
+            _to_df(results),
+            DataProvenance(
+                source="7709.history_transactions",
+                point_in_time=False,
+                is_approximate=True,
+                calculation_method="local tick amount buckets; not server reported semantics",
+            ),
+        )
 
 
 # ============================================================
@@ -2311,6 +2351,8 @@ class AsyncTdxClient:
             try:
 
                 async def _run_attempt() -> Any:
+                    if remaining is not None:
+                        conn.set_deadline(time.monotonic() + remaining)
                     await conn.connect()
                     return await conn.execute(cmd)
 
@@ -2694,10 +2736,18 @@ class AsyncTdxClient:
         end_date: int | None = None,
         float_shares: float | None = None,
         total_shares: float | None = None,
+        *,
+        strict_semantics: bool = False,
     ) -> pd.DataFrame:
         """每日基础指标：前收盘 / 涨跌幅 / 振幅 / 换手率 / 市值。"""
         if end_date is None:
             end_date = _today_in_shanghai()
+        supplied_shares = float_shares is not None and total_shares is not None
+        if strict_semantics and not supplied_shares:
+            raise TdxSemanticError(
+                "get_basic_daily 需要显式提供 point-in-time 股本；默认财务数据是最新快照，"
+                "可能产生未来信息泄漏"
+            )
         bars, events = await self._daily_bars_with_xdxr(market, code, start_date, end_date)
         if float_shares is None or total_shares is None:
             fin = await self.get_finance_info(market, code)
@@ -2706,11 +2756,22 @@ class AsyncTdxClient:
                     float_shares = float(fin.iloc[0].get("liutong_guben", 0.0) or 0.0)
                 if total_shares is None:
                     total_shares = float(fin.iloc[0].get("zong_guben", 0.0) or 0.0)
-        return compute_basic_daily(
+        result = compute_basic_daily(
             bars,
             events,
             float_shares=float_shares or 0.0,
             total_shares=total_shares or 0.0,
+        )
+        return attach_provenance(
+            result,
+            DataProvenance(
+                source="7709.daily_bars+finance_snapshot",
+                point_in_time=supplied_shares,
+                is_approximate=not supplied_shares,
+                calculation_method="latest finance share counts"
+                if not supplied_shares
+                else "explicit share counts",
+            ),
         )
 
     async def get_formula(
@@ -3283,7 +3344,7 @@ class AsyncTdxClient:
         return _to_df(_classify_fund_flow(records))
 
     async def get_history_fund_flow(
-        self, market: Market, code: str, start: int, count: int
+        self, market: Market, code: str, start: int, count: int, *, strict_semantics: bool = False
     ) -> pd.DataFrame:
         """获取个股历史日线资金流向序列。
 
@@ -3303,7 +3364,19 @@ class AsyncTdxClient:
         except Exception:
             direct = []
         if direct:
-            return _to_df(direct)
+            return attach_provenance(
+                _to_df(direct),
+                DataProvenance(
+                    source="7709.history_fund_flow",
+                    point_in_time=True,
+                    calculation_method="server reported historical fund flow",
+                ),
+            )
+
+        if strict_semantics:
+            raise TdxSemanticError(
+                "服务器未提供历史资金流向原始口径；strict_semantics=True 时拒绝按逐笔金额分档估算"
+            )
 
         # 同同步版：用 _execute_std 以便在纯报价/旧版节点上回退到全功能主机。
         bars = await self._execute_std(
@@ -3320,4 +3393,12 @@ class AsyncTdxClient:
                 800,
             )
             results.append(_historical_fund_flow_from_records(date, records))
-        return _to_df(results)
+        return attach_provenance(
+            _to_df(results),
+            DataProvenance(
+                source="7709.history_transactions",
+                point_in_time=False,
+                is_approximate=True,
+                calculation_method="local tick amount buckets; not server reported semantics",
+            ),
+        )

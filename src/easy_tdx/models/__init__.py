@@ -1,3 +1,4 @@
+from ..provenance import DataProvenance
 from .auction import AuctionPoint
 from .bar import SecurityBar
 from .configdata import (
@@ -74,6 +75,7 @@ __all__ = [
     "MarketStat",
     "FundFlow",
     "HistoricalFundFlow",
+    "DataProvenance",
     "TdxStat",
     "TdxStat2",
     "TdxXgsg",

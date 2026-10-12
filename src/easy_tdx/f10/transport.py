@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
@@ -80,3 +81,49 @@ class TqlexTransport:
                     time.sleep(0.3 * (attempt + 1))
                     continue
         raise TdxConnectionError(f"TQLEX 请求失败 ({entry}): {last_exc}")
+
+
+class AsyncTqlexTransport:
+    """基于可选 ``httpx`` 的原生 asyncio 传输层。"""
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 8.0,
+        retries: int = 2,
+        headers: dict[str, str] | None = None,
+        lenient_json: bool = False,
+    ) -> None:
+        try:
+            import httpx  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise ImportError("AsyncTqlexTransport 需要安装 easy-tdx-plus[async-http]") from exc
+        self._httpx = httpx
+        self.base_url = base_url
+        self.timeout = timeout
+        self.retries = max(0, retries)
+        self.lenient_json = lenient_json
+        self.headers = dict(_DEFAULT_HEADERS)
+        if headers:
+            self.headers.update(headers)
+        self._client = httpx.AsyncClient(timeout=timeout, headers=self.headers)
+
+    async def post(self, entry: str, body: Any) -> dict[str, Any]:
+        url = f"{self.base_url}?{urlencode({'Entry': entry})}"
+        last_exc: Exception | None = None
+        for attempt in range(self.retries + 1):
+            try:
+                response = await self._client.post(url, json=body)
+                response.raise_for_status()
+                parsed = _decode_json(response.content, self.lenient_json)
+                if not isinstance(parsed, dict):
+                    raise TdxConnectionError(f"TQLEX 返回非对象 JSON: {entry}")
+                return parsed
+            except (self._httpx.HTTPError, TimeoutError, OSError, ValueError) as exc:
+                last_exc = exc
+                if attempt < self.retries:
+                    await asyncio.sleep(0.3 * (attempt + 1))
+        raise TdxConnectionError(f"TQLEX 请求失败 ({entry}): {last_exc}")
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
